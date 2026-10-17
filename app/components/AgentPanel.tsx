@@ -307,7 +307,16 @@ function AgentChatConnected({
 	const [inputValue, setInputValue] = useState("");
 	const { startCompose } = useUIStore();
 
-	const agent = useAgent({ agent: "EmailAgent", name: mailboxId });
+	// TODO(integration): L4 edit outside its file list. partysocket picks wss
+	// for every host but localhost:/127.0.0.1:/private ranges, so under
+	// `everyapp dev` (http://agentic-inbox.localhost:<port>) the socket and
+	// useAgentChat's get-messages fetch went to wss/https and the mailbox page
+	// fell into the error boundary. Follow the page's own protocol.
+	const agent = useAgent({
+		agent: "EmailAgent",
+		name: mailboxId,
+		protocol: typeof window !== "undefined" && window.location.protocol === "http:" ? "ws" : "wss",
+	});
 	const { messages, sendMessage, status, setMessages, stop } =
 		useAgentChat({ agent });
 	const isStreaming = status === "streaming" || status === "submitted";

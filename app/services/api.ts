@@ -6,16 +6,91 @@ import type { Email, Folder, Mailbox } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * What a person reads for the refusals the gateway and this app answer with.
+ * Refusals are `{ error: <code>, message? }` (the gateway's email capability,
+ * relayed by the send routes as 502) or `{ error, code }` (the role check);
+ * upstream's own routes put readable text in `error`, which passes through.
+ */
+const REFUSAL_MESSAGES: Record<string, string> = {
+	email_sender_not_allowed:
+		"This mailbox's domain isn't one this app may send from. An owner adds it to capabilities.email.senders in everyapp.config.ts and redeploys.",
+	email_sender_not_verified:
+		"This mailbox's domain isn't set up for Email Sending on the gateway's Cloudflare account yet. The gateway's operator onboards the domain.",
+	email_budget_exhausted:
+		"The gateway's sending limit for today is reached. Try again later.",
+	email_provider_limited:
+		"Cloudflare Email Sending is limiting this account right now. Try again later.",
+	email_message_too_large:
+		"This email is too large to send (5 MB at most, attachments included).",
+	email_attachments_unsupported:
+		"This gateway can't send attachments yet. Remove them and send again.",
+	email_invalid_message:
+		"The gateway refused this email as malformed. Check the recipients and try again.",
+	email_send_failed: "The email couldn't be sent. Try again in a moment.",
+	email_not_configured: "Email sending isn't set up on this gateway.",
+	integration_not_configured: "Email sending isn't set up on this gateway.",
+	capability_not_requested:
+		"This app isn't allowed to send email on this gateway (its manifest doesn't request the email capability).",
+	integration_read_only: "This connection is read only; it can't send email.",
+	admin_required: "Only the organization's owners and admins can do this.",
+	unauthenticated: "Your session has ended. Reload the page to sign in again.",
+};
+
+const text = (value: unknown) =>
+	typeof value === "string" && value.trim() ? value : undefined;
+
+/** A machine code (`email_sender_not_allowed`), never upstream's readable `error` text. */
+function refusalCode(body: Record<string, unknown>): string | undefined {
+	const code = text(body.code) ?? text(body.error);
+	return code && /^[a-z][a-z0-9_]*$/.test(code) ? code : undefined;
+}
+
+function refusalMessage(status: number, body: Record<string, unknown>): string {
+	const code = refusalCode(body);
+	return (
+		(code && REFUSAL_MESSAGES[code]) ||
+		text(body.message) ||
+		text(body.error) ||
+		`Request failed: ${status}`
+	);
+}
+
 export class ApiError extends Error {
 	status: number;
+	/** The refusal code (`body.code`, else a code-shaped `body.error`), e.g. `email_sender_not_allowed`. */
+	code: string | undefined;
 	body: Record<string, unknown>;
 
 	constructor(status: number, body: Record<string, unknown>) {
-		super((body.error as string) || `Request failed: ${status}`);
+		super(refusalMessage(status, body));
 		this.name = "ApiError";
 		this.status = status;
+		this.code = refusalCode(body);
 		this.body = body;
 	}
+}
+
+const RELOAD_STAMP_KEY = "agentic-inbox:reloaded-for-401";
+const RELOAD_GUARD_MS = 10_000;
+
+/**
+ * The gateway answers a request whose session has ended with 401 (JSON, no
+ * redirect), so reload the page: the navigation goes through the gateway,
+ * which sends the person to sign in. Once per 10 s at most, so a 401 the
+ * gateway answers right after a reload can't loop.
+ */
+export function reloadForSignIn(): boolean {
+	if (typeof window === "undefined") return false;
+	try {
+		const last = Number(window.sessionStorage.getItem(RELOAD_STAMP_KEY) ?? 0);
+		if (Date.now() - last < RELOAD_GUARD_MS) return false;
+		window.sessionStorage.setItem(RELOAD_STAMP_KEY, String(Date.now()));
+	} catch {
+		// sessionStorage unavailable: reload anyway.
+	}
+	window.location.reload();
+	return true;
 }
 
 async function request<T>(
@@ -41,6 +116,7 @@ async function request<T>(
 		});
 
 		if (!res.ok) {
+			if (res.status === 401) reloadForSignIn();
 			const body = await res.json().catch(() => ({}));
 			throw new ApiError(res.status, body as Record<string, unknown>);
 		}
@@ -92,12 +168,29 @@ interface EmailListResponse {
 	totalCount: number;
 }
 
+/** `GET /api/v1/config`. `ready` is whether the gateway can send mail (absent: unknown). */
+export interface AppConfig {
+	domains: string[];
+	emailAddresses: string[];
+	ready?: boolean;
+}
+
+/** `GET /api/v1/me`: the verified person, from the gateway's identity. */
+export interface Me {
+	id: string;
+	email: string;
+	orgId: string;
+	role: "owner" | "admin" | "member";
+	/** The gateway's origin (sign-out, personal access tokens, its `/mcp`). */
+	gatewayUrl: string;
+}
+
 // ---------- API client ----------
 
 const api = {
 	// Config
-	getConfig: () =>
-		get<{ domains: string[]; emailAddresses: string[] }>("/api/v1/config"),
+	getConfig: () => get<AppConfig>("/api/v1/config"),
+	getMe: () => get<Me>("/api/v1/me"),
 
 	// Mailboxes
 	listMailboxes: () => get<Mailbox[]>("/api/v1/mailboxes"),
@@ -163,3 +256,10 @@ const api = {
 };
 
 export default api;
+
+/** The `/api/v1/me` query, shared by every component that needs the person. */
+export const meQuery = {
+	queryKey: ["me"] as const,
+	queryFn: () => api.getMe(),
+	staleTime: 5 * 60_000,
+};

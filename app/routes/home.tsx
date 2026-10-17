@@ -3,6 +3,7 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import {
+	Banner,
 	Button,
 	Dialog,
 	Empty,
@@ -12,7 +13,7 @@ import {
 	Text,
 	useKumoToastManager,
 } from "@cloudflare/kumo";
-import { EnvelopeIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { EnvelopeIcon, PlusIcon, TrashIcon, WarningIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -161,6 +162,8 @@ export default function HomeRoute() {
 						</p>
 					)}
 				</div>
+
+				{configData?.ready === false && <SendingNotReadyBanner />}
 
 				{isLoading ? (
 					<div className="flex justify-center py-20">
@@ -359,5 +362,21 @@ export default function HomeRoute() {
 				</Dialog>
 			</Dialog.Root>
 		</div>
+	);
+}
+
+/**
+ * `GET /api/v1/config` says `ready: false` when the gateway can't send mail
+ * (its email capability isn't configured): say so before anyone composes.
+ */
+function SendingNotReadyBanner() {
+	return (
+		<Banner
+			variant="alert"
+			className="mb-6"
+			icon={<WarningIcon size={18} weight="fill" />}
+			title="Email sending isn't set up on this gateway"
+			description="Mailboxes still receive mail and drafts still save, but sends are refused until the gateway's operator sets up Cloudflare Email Sending for it."
+		/>
 	);
 }

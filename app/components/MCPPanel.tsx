@@ -9,8 +9,9 @@ import {
 	PlugsIcon,
 	WrenchIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useParams } from "react-router";
+import { meQuery } from "~/services/api";
 
 function CopyButton({ text }: { text: string }) {
 	const [copied, setCopied] = useState(false);
@@ -58,11 +59,39 @@ const TOOLS = [
 	{ name: "move_email", desc: "Move email to a folder" },
 ];
 
+function UrlField({ label, url }: { label: string; url: string }) {
+	return (
+		<div className="space-y-1.5">
+			<label className="text-xs font-medium text-kumo-strong block">
+				{label}
+			</label>
+			<div className="relative group">
+				<div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+					<CopyButton text={url} />
+				</div>
+				<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line break-all leading-relaxed">
+					{url}
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * How to reach this inbox's tools over MCP on Every App. The gateway serves
+ * them twice: its own /mcp, one connector for every app the person uses
+ * (OAuth sign-in from the client, or a personal access token), and this
+ * app's host /mcp, for this app alone (a personal access token). The
+ * gateway's origin comes from /api/v1/me; until that answers, only the app
+ * host's URL shows.
+ */
 export default function MCPPanel() {
-	const { mailboxId } = useParams<{ mailboxId: string }>();
-	const baseUrl =
-		typeof window !== "undefined" ? window.location.origin : "https://your-app.workers.dev";
-	const mcpUrl = `${baseUrl}/mcp`;
+	const { data: me } = useQuery({ ...meQuery, retry: false });
+	const appOrigin =
+		typeof window !== "undefined" ? window.location.origin : "https://agentic-inbox.your-gateway.example";
+	const gatewayOrigin = me?.gatewayUrl?.replace(/\/+$/, "");
+	const gatewayMcpUrl = gatewayOrigin ? `${gatewayOrigin}/mcp` : null;
+	const appMcpUrl = `${appOrigin}/mcp`;
 
 	return (
 		<div className="flex flex-col h-full">
@@ -83,31 +112,50 @@ export default function MCPPanel() {
 								Connect via MCP
 							</h3>
 							<p className="text-xs text-kumo-subtle">
-								Model Context Protocol
+								Model Context Protocol, through your Every App gateway
 							</p>
 						</div>
 					</div>
 					<p className="text-xs text-kumo-subtle leading-relaxed">
-						This email agent exposes an MCP server so AI coding
-						assistants can manage your inbox directly — read emails,
-						search, draft replies, and send messages using natural
-						language.
+						AI assistants (Claude, Cursor, ChatGPT…) can read, search,
+						draft and send from your organization's mailboxes. Your
+						gateway serves the tools, and every call acts as you.
 					</p>
 				</div>
 
-				{/* MCP URL */}
-				<div className="space-y-1.5">
-					<label className="text-xs font-medium text-kumo-strong block">
-						Server URL
-					</label>
-					<div className="relative group">
-						<div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-							<CopyButton text={mcpUrl} />
-						</div>
-						<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line break-all leading-relaxed">
-							{mcpUrl}
-						</div>
+				{/* MCP URLs */}
+				{gatewayMcpUrl && (
+					<div className="space-y-1">
+						<UrlField label="Every App connector" url={gatewayMcpUrl} />
+						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+							One connector for every app you use on this gateway.
+							Your MCP client signs in through the gateway, or
+							sends a personal access token.
+						</p>
 					</div>
+				)}
+				<div className="space-y-1">
+					<UrlField label="This app only" url={appMcpUrl} />
+					<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+						Connect with a personal access token from the gateway,
+						sent as <code className="font-mono">Authorization: Bearer epat_…</code>.
+						{gatewayOrigin ? (
+							<>
+								{" "}Create one on the gateway under{" "}
+								<a
+									href={`${gatewayOrigin}/admin/tokens`}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-kumo-link hover:text-kumo-link-hover"
+								>
+									Tokens
+								</a>
+								.
+							</>
+						) : (
+							" Create one on your gateway under Tokens."
+						)}
+					</p>
 				</div>
 
 				{/* Available tools */}
