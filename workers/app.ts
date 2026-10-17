@@ -85,7 +85,7 @@ export default {
 			const refused = requireOrganization(env, user);
 			if (refused) return refused;
 			users.set(request, user);
-			return app.fetch(request, withGateway(env, request), ctx as ExecutionContext);
+			return app.fetch(request, withGateway(env, request), ctx);
 		},
 		{ tools },
 	),

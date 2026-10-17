@@ -1,19 +1,13 @@
-// Types `cf workers types` can't infer yet (.cloudflare/types/index.d.ts
+// Types `cf workers types` can't infer (.cloudflare/types/index.d.ts
 // declares `Cloudflare.Env` from cloudflare.config.ts; this merges into it).
-//
-// The Durable Object namespaces: the SDK's everyAppWorker() names a class's
-// Worker by string, so cf infers `DurableObjectNamespace<undefined>` and
-// every RPC call on a stub (`getFolders`, `createEmail`, …) is a type error.
-// Remove these two once the SDK emits typed namespaces (platform PR 2).
-// TODO(integration): lane L6 removed EMAIL_MCP here with the EmailMCP class
-// (workers/mcp/ is deleted; the MCP tools are workers/everyapp/tools.ts).
+// The Durable Object namespaces need nothing here: cloudflare.config.ts
+// hands everyAppWorker() the entry as a `cf-worker` module, so cf types
+// MAILBOX and EMAIL_AGENT with their classes.
 //
 // The rest are set only on a deployed Worker (`everyapp deploy` writes them)
 // or only in `.dev.vars`, so the dev-mode generated Env doesn't carry them.
 declare namespace Cloudflare {
 	interface Env {
-		MAILBOX: DurableObjectNamespace<import("./durableObject").MailboxDO>;
-		EMAIL_AGENT: DurableObjectNamespace<import("./agent").EmailAgent>;
 		EMAIL_ADDRESSES: string[];
 		/** The organization this copy of the app belongs to (org-owned deploys). */
 		EVERY_APP_ORG_ID?: string;
