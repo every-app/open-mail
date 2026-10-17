@@ -119,9 +119,6 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
-      workers-ai-provider:
-        specifier: ^3.1.2
-        version: 3.1.2(@ai-sdk/provider@3.0.19)(ai@6.0.116(zod@3.25.76))
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -3507,12 +3504,6 @@ packages:
     resolution: {integrity: sha512-8MadBuffZ5NdpLwZjUmsqT5QlaKXq4gjgT6wzcKeynZTICNXyePhc+5QVoKiK7+MMhFTLNrRO2KXLlpk8Q6BkA==}
     engines: {node: '>=16'}
     hasBin: true
-
-  workers-ai-provider@3.1.2:
-    resolution: {integrity: sha512-ZXCWZIWk9rmjVKo0rUmbLQrRXdKWViAdqyV/cdqNQYT7FlSwITyZfZG/9CaInKKRDQQdBNvdPyB2+LWIz1E8Bw==}
-    peerDependencies:
-      '@ai-sdk/provider': ^3.0.0
-      ai: ^6.0.0
 
   wrangler@4.72.0:
     resolution: {integrity: sha512-bKkb8150JGzJZJWiNB2nu/33smVfawmfYiecA6rW4XH7xS23/jqMbgpdelM34W/7a1IhR66qeQGVqTRXROtAZg==}
@@ -6967,11 +6958,6 @@ snapshots:
       '@cloudflare/workerd-linux-64': 1.20261006.1
       '@cloudflare/workerd-linux-arm64': 1.20261006.1
       '@cloudflare/workerd-windows-64': 1.20261006.1
-
-  workers-ai-provider@3.1.2(@ai-sdk/provider@3.0.19)(ai@6.0.116(zod@3.25.76)):
-    dependencies:
-      '@ai-sdk/provider': 3.0.19
-      ai: 6.0.116(zod@3.25.76)
 
   wrangler@4.72.0(@cloudflare/workers-types@4.20260316.1):
     dependencies:
