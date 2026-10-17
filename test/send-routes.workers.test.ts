@@ -1,4 +1,3 @@
-/// <reference types="@cloudflare/vitest-pool-workers" />
 // The send routes (new mail, reply, forward) against the real MailboxDO and
 // R2 in workerd: sends are awaited, a refusal answers 502 with the gateway's
 // code and leaves no Sent copy, and the Sent row is written only after the
@@ -6,22 +5,10 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Folders } from "../shared/folders";
-import type { MailboxDO } from "../workers/durableObject";
 import { emailAdapter, type GatewayEmailMessage } from "../workers/everyapp/email";
 import { withGateway } from "../workers/everyapp/gateway";
 import { app } from "../workers/index";
 import type { Env } from "../workers/types";
-import type { RecordingAgent } from "./workers/entry";
-
-declare module "cloudflare:test" {
-	interface ProvidedEnv {
-		MAILBOX: DurableObjectNamespace<MailboxDO>;
-		EMAIL_AGENT: DurableObjectNamespace<RecordingAgent>;
-		BUCKET: R2Bucket;
-		DOMAINS: string;
-		EMAIL_ADDRESSES: string[];
-	}
-}
 
 type Send = (message: GatewayEmailMessage) => Promise<{ messageId?: string; status: "delivered" | "queued" | "logged" }>;
 

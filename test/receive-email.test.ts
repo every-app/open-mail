@@ -1,29 +1,24 @@
-/// <reference types="@cloudflare/vitest-pool-workers" />
-// Inbound mail: upstream's receiveEmail() (byte-identical) against the real
-// MailboxDO, R2 and SQLite in workerd, fed the raw RFC 5322 message Email
-// Routing hands the Worker's email() handler.
+// Inbound mail: the production email() handler (workers/app.ts) and
+// upstream's receiveEmail() (byte-identical) against the real MailboxDO, R2
+// and SQLite in workerd, fed the raw RFC 5322 message Email Routing hands the
+// Worker. The chat agent is the real EmailAgent; its handleNewEmail() is
+// stubbed, so the auto-draft trigger is observed without calling a model.
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MailboxDO } from "../workers/durableObject";
-import { withNamedAgents } from "../workers/everyapp/inbound";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { EmailAgent } from "../workers/agent";
+import worker from "../workers/app";
 import { receiveEmail } from "../workers/index";
 import type { Env } from "../workers/types";
 import inboundEml from "./fixtures/inbound.eml?raw";
-import type { RecordingAgent } from "./workers/entry";
-
-declare module "cloudflare:test" {
-	interface ProvidedEnv {
-		MAILBOX: DurableObjectNamespace<MailboxDO>;
-		EMAIL_AGENT: DurableObjectNamespace<RecordingAgent>;
-		BUCKET: R2Bucket;
-		DOMAINS: string;
-		EMAIL_ADDRESSES: string[];
-	}
-}
 
 const FIXTURE_ID = "order-1042-question@example.org";
 
+let handleNewEmail: MockInstance<EmailAgent["handleNewEmail"]>;
+beforeEach(() => {
+	handleNewEmail = vi.spyOn(EmailAgent.prototype, "handleNewEmail").mockResolvedValue({ drafted: false } as never);
+});
 afterEach(() => vi.restoreAllMocks());
+
 let count = 0;
 
 /** A mailbox of its own for each test (storage is shared across tests). */
@@ -53,27 +48,30 @@ function plainMessage(headers: Record<string, string>, body = "Thanks!"): string
 	return [...lines, "", body, ""].join("\r\n");
 }
 
-/**
- * Delivers `raw` as Email Routing would, with the env workers/app.ts's
- * email() handler passes (withNamedAgents()), and waits for the auto-draft
- * trigger.
- */
-async function deliver(raw: string, receiveEnv: Env = withNamedAgents(env as unknown as Env)): Promise<void> {
+type Event = { raw: ReadableStream; rawSize: number };
+
+function event(raw: string): Event {
 	const bytes = new TextEncoder().encode(raw);
+	return { raw: new Response(bytes).body!, rawSize: bytes.byteLength };
+}
+
+/** Delivers `raw` to the production email() handler, as Email Routing would, and waits for the auto-draft trigger. */
+async function deliver(raw: string): Promise<void> {
 	const ctx = createExecutionContext();
-	await receiveEmail({ raw: new Response(bytes).body!, rawSize: bytes.byteLength }, receiveEnv, ctx);
+	await worker.email(event(raw), env as unknown as Env, ctx);
 	await waitOnExecutionContext(ctx);
 }
 
+/** The auto-draft triggers the agent of `address` received. */
 function agentCalls(address: string) {
-	return env.EMAIL_AGENT.get(env.EMAIL_AGENT.idFromName(address)).calls();
+	return handleNewEmail.mock.calls.map(([data]) => data).filter((data) => data.mailboxId === address);
 }
 
 async function attachmentKeys(): Promise<string[]> {
 	return (await env.BUCKET.list({ prefix: "attachments/" })).objects.map((o) => o.key);
 }
 
-describe("receiveEmail", () => {
+describe("inbound mail: email() and receiveEmail()", () => {
 	it("files the message in the mailbox's Inbox and asks the agent for an auto-draft", async () => {
 		const address = await newMailbox();
 		await deliver(fixtureTo(address));
@@ -93,32 +91,31 @@ describe("receiveEmail", () => {
 		expect(full).toMatchObject({ message_id: FIXTURE_ID, in_reply_to: null, email_references: null });
 		expect(full?.body).toContain("Could you tell me when order 1042 ships?");
 
-		expect(await agentCalls(address)).toEqual([
+		expect(agentCalls(address)).toEqual([
 			{
-				path: "/onNewEmail",
-				body: {
-					mailboxId: address,
-					emailId: email.id,
-					sender: "alice@example.org",
-					subject: "Question about my order",
-					threadId: email.id,
-				},
+				mailboxId: address,
+				emailId: email.id,
+				sender: "alice@example.org",
+				subject: "Question about my order",
+				threadId: email.id,
 			},
 		]);
 	});
 
-	it("reaches the agent of a mailbox nobody has opened yet only with the agent named (withNamedAgents)", async () => {
+	it("reaches the agent of a mailbox nobody has opened yet (receiveEmail alone can't)", async () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const bare = await newMailbox();
-		await deliver(fixtureTo(bare), env as unknown as Env);
+		const ctx = createExecutionContext();
+		await receiveEmail(event(fixtureTo(bare)), env as unknown as Env, ctx);
+		await waitOnExecutionContext(ctx);
 		expect(await mailbox(bare).getEmails({ folder: "inbox" })).toHaveLength(1);
-		expect(await agentCalls(bare)).toEqual([]);
+		expect(agentCalls(bare)).toEqual([]);
 		// partyserver logs the refusal and answers 500; receiveEmail doesn't look.
 		expect(error.mock.calls.flat().map(String).join(" ")).toContain("Missing namespace or room headers");
 
 		const named = await newMailbox();
 		await deliver(fixtureTo(named));
-		expect(await agentCalls(named)).toHaveLength(1);
+		expect(agentCalls(named)).toHaveLength(1);
 	});
 
 	it("stores attachments in R2 under attachments/<emailId>/<attachmentId>/<filename>", async () => {
@@ -185,11 +182,12 @@ describe("receiveEmail", () => {
 		await deliver(fixtureTo(address));
 
 		expect(await mailbox(address).getEmails({ folder: "inbox" })).toEqual([]);
-		expect(await agentCalls(address)).toEqual([]);
+		expect(agentCalls(address)).toEqual([]);
 		expect(await attachmentKeys()).toEqual(keysBefore);
 	});
 
 	it("throws on a message without a recipient, so Email Routing can retry or bounce it", async () => {
+		vi.spyOn(console, "error").mockImplementation(() => {});
 		await expect(
 			deliver(plainMessage({ From: "alice@example.org", Subject: "no To", "Message-ID": "<no-to@example.org>" })),
 		).rejects.toThrow("received email with empty to");
