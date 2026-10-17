@@ -37,8 +37,13 @@ code=$(curl "${R[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$U/favicon
 [ "${code%% *}" = 200 ] && pass "GET /favicon.svg -> $code" || fail "GET /favicon.svg -> $code"
 
 echo "== GET /api/v1/config"
+# TODO(integration): lane L2 added `ready` (the gateway's email status; false
+# until the email capability is on the gateway and in .dev.vars).
 body=$(curl "${R[@]}" "$U/api/v1/config")
-[ "$body" = '{"domains":["example.com"],"emailAddresses":[]}' ] && pass "config -> $body" || fail "config -> $body"
+case "$body" in
+	'{"domains":["example.com"],"emailAddresses":[],"ready":'*'}') pass "config -> $body" ;;
+	*) fail "config -> $body" ;;
+esac
 
 echo "== Set-Cookie: the app sets none"
 if grep -qi '^set-cookie:' "$TMP/root.h"; then fail "GET / set a cookie"; else pass "GET / sets no cookie"; fi
