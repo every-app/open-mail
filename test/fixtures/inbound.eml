@@ -1,0 +1,36 @@
+From: Alice Example <alice@example.org>
+To: Dev Inbox <dev@example.com>
+Subject: Question about my order
+Date: Fri, 17 Oct 2026 09:30:00 +0000
+Message-ID: <order-1042-question@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: multipart/alternative; boundary="alt-boundary"
+
+--alt-boundary
+Content-Type: text/plain; charset=utf-8
+
+Hi,
+
+Could you tell me when order 1042 ships? The details are attached.
+
+Thanks,
+Alice
+
+--alt-boundary
+Content-Type: text/html; charset=utf-8
+
+<p>Hi,</p><p>Could you tell me when order 1042 ships? The details are attached.</p><p>Thanks,<br>Alice</p>
+
+--alt-boundary--
+
+--mixed-boundary
+Content-Type: text/plain; charset=utf-8; name="order-1042.txt"
+Content-Disposition: attachment; filename="order-1042.txt"
+Content-Transfer-Encoding: base64
+
+T3JkZXIgMTA0MjogdHdvIGJsdWUgbXVncywgb25lIHRlYXBvdC4KRGVsaXZlcnkgd2luZG93OiBUdWVzZGF5IDktMTIuCg==
+
+--mixed-boundary--

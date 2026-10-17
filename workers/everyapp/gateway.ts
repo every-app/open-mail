@@ -9,7 +9,7 @@
  * `email()` handler stay as upstream wrote them.
  *
  * Lane ownership: L1 owns PROVIDERS, mapModel, gatewayAi and gatewayModel;
- * L2 owns gatewayEmail; withGateway() itself stays as it is.
+ * L2 owns gatewayEmail (./email.ts); withGateway() itself stays as it is.
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
@@ -17,6 +17,7 @@ import {
 	type GatewayCallFor,
 } from "@every-app/sdk/server";
 import type { Env } from "../types";
+import { gatewayEmail } from "./email";
 
 /**
  * Any origin does: the SDK sends the request's path over the
@@ -123,38 +124,10 @@ export function agentModelId(env: ProviderEnv): string {
 }
 
 /**
- * A `send_email`-shaped binding over the gateway's email capability.
- *
- * Until that capability (platform PR 3) is in the linked SDK this is a
- * stand-in with the same signature (lane L2 replaces the body with the SDK's
- * sendEmail()): in local dev it logs the message and reports a `dev-` id;
- * anywhere else it refuses, so a deployed Worker never reports a send that
- * didn't happen.
+ * `env.EMAIL`: the gateway's email capability as a `send_email` binding
+ * (lane L2; the adapter and its stand-in live in ./email.ts).
  */
-export function gatewayEmail(env: Cloudflare.Env, target?: GatewayCallFor): SendEmail {
-	void target;
-	const send = async (message: EmailMessage | EmailMessageBuilder): Promise<EmailSendResult> => {
-		const summary = describeMessage(message);
-		if (!env.EVERYAPP_DEV) {
-			throw Object.assign(
-				new Error(`Email sending isn't connected to the gateway yet; not sent: ${summary}`),
-				{ code: "email_not_configured" },
-			);
-		}
-		const messageId = `dev-${crypto.randomUUID()}`;
-		console.log(`[agentic-inbox dev] email not sent (the gateway email capability isn't wired yet): ${summary} (${messageId})`);
-		return { messageId };
-	};
-	return { send } as SendEmail;
-}
-
-function describeMessage(message: EmailMessage | EmailMessageBuilder): string {
-	const m = message as { from?: unknown; to?: unknown; subject?: unknown };
-	const address = (v: unknown): string =>
-		typeof v === "string" ? v : v && typeof v === "object" && "email" in v ? String((v as { email: unknown }).email) : "";
-	const to = Array.isArray(m.to) ? m.to.map(address).join(", ") : address(m.to);
-	return `from ${address(m.from)} to ${to} subject ${JSON.stringify(typeof m.subject === "string" ? m.subject : "")}`;
-}
+export { gatewayEmail };
 
 /** The env upstream's code expects: AI and EMAIL present, both brokered by the gateway. */
 export function withGateway(env: Cloudflare.Env, target?: GatewayCallFor): Env {

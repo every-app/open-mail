@@ -10,6 +10,7 @@ import { withGateway } from "./everyapp/gateway";
 import { agentGuard, requireOrganization, users } from "./everyapp/identity";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { withNamedAgents } from "./everyapp/inbound";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
@@ -84,7 +85,10 @@ export default {
 		ctx: ExecutionContext,
 	) {
 		try {
-			await receiveEmail(event, env, ctx);
+			// TODO(integration): lane L2 (inbound): withNamedAgents() lets the
+			// auto-draft reach a mailbox's agent before its chat panel was ever
+			// opened (workers/everyapp/inbound.ts).
+			await receiveEmail(event, withNamedAgents(env), ctx);
 		} catch (e) {
 			console.error("Failed to process incoming email:", (e as Error).message, (e as Error).stack);
 			// Re-throw so Cloudflare's email routing can retry delivery or bounce the message.

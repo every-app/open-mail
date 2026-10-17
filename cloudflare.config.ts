@@ -22,9 +22,12 @@ export default defineConfig((ctx) => {
         // Mailbox settings (mailboxes/<address>.json) and attachments, in a
         // bucket named after the Worker.
         BUCKET: bindings.r2({ name: worker.name }),
-        // The domains mailboxes may be created on, comma-separated. Lane L2
-        // derives them from the manifest's email senders.
-        DOMAINS: bindings.text(process.env.INBOX_DOMAINS ?? "example.com"),
+        // The domains mailboxes may be created on, comma-separated: the
+        // domains of the manifest's email senders (the gateway refuses mail
+        // from any other), else INBOX_DOMAINS, else example.com.
+        DOMAINS: bindings.text(
+          senderDomains(manifest) ?? process.env.INBOX_DOMAINS ?? "example.com",
+        ),
         // Upstream's mailbox allowlist; off (organization roles replace it).
         EMAIL_ADDRESSES: bindings.json([] as string[]),
         // "workers-ai" (default) or "openrouter": which gateway AI provider
@@ -36,3 +39,20 @@ export default defineConfig((ctx) => {
     },
   };
 });
+
+/**
+ * The domains `capabilities.email.senders` names (`*@example.com`,
+ * `support@example.com`), comma-separated, or undefined when it names none.
+ * TODO(integration): lane inbox-L2b declares the senders once the gateway's
+ * email capability (platform PR 3) is in the linked checkout; until then the
+ * manifest has no `capabilities.email` and DOMAINS falls back.
+ */
+function senderDomains(app: object): string | undefined {
+  const senders =
+    (app as { capabilities?: { email?: { senders?: readonly string[] } } })
+      .capabilities?.email?.senders ?? [];
+  const domains = new Set(
+    senders.map((s) => s.split("@")[1]?.trim().toLowerCase()).filter(Boolean),
+  );
+  return domains.size > 0 ? [...domains].join(",") : undefined;
+}
