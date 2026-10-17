@@ -16,8 +16,8 @@ import EmailIframe from "~/components/EmailIframe";
 import {
 	formatDetailDate,
 	formatShortDate,
-	rewriteInlineImages,
 	stripHtml,
+	useInlineImages,
 } from "~/lib/utils";
 import type { Email } from "~/types";
 
@@ -35,6 +35,12 @@ interface ThreadMessageProps {
 	onDeleteDraft?: () => void;
 	onViewSource?: () => void;
 	onPreviewImage?: (url: string, filename: string) => void;
+}
+
+/** The expanded message body, its inline images fetched by the page (see `useInlineImages`). */
+function MessageBody({ email, mailboxId }: { email: Email; mailboxId?: string }) {
+	const body = useInlineImages(email.body || "", mailboxId, email.id, email.attachments);
+	return <EmailIframe body={body} autoSize />;
 }
 
 function Avatar({ isDraft, isSelf, sender }: { isDraft?: boolean; isSelf: boolean; sender: string }) {
@@ -157,15 +163,7 @@ export default function ThreadMessage({
 				</div>
 
 				<div className="md:ml-[42px]">
-					<EmailIframe
-						body={rewriteInlineImages(
-							email.body || "",
-							mailboxId || "",
-							email.id,
-							email.attachments,
-						)}
-						autoSize
-					/>
+					<MessageBody email={email} mailboxId={mailboxId} />
 				</div>
 
 				{isDraft && (onSendDraft || onEditDraft || onDeleteDraft) && (

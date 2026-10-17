@@ -8,8 +8,10 @@
  * Date formatting has been consolidated into `shared/dates.ts`.
  * Re-export for backwards compatibility with existing imports.
  */
+import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import { formatQuotedDate } from "shared/dates";
+import api from "~/services/api";
 import type { Attachment } from "~/types";
 
 export {
@@ -171,33 +173,166 @@ export function buildQuotedReplyBlock(
 	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${formattedDate}, ${escapedSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
 }
 
+/** Inline images larger than this stay out of the message body and are listed as attachments. */
+export const INLINE_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+type InlineAttachment = Pick<Attachment, "id"> & {
+	content_id?: string | null;
+	disposition?: string | null;
+	mimetype?: string | null;
+	filename?: string | null;
+	size?: number | null;
+};
+
+type FetchAttachment = (
+	mailboxId: string,
+	emailId: string,
+	attachmentId: string,
+) => Promise<Blob>;
+
+const IMAGE_TYPE_BY_EXTENSION: Record<string, string> = {
+	avif: "image/avif",
+	bmp: "image/bmp",
+	gif: "image/gif",
+	ico: "image/x-icon",
+	jpeg: "image/jpeg",
+	jpg: "image/jpeg",
+	png: "image/png",
+	svg: "image/svg+xml",
+	webp: "image/webp",
+};
+
+// The type goes into the HTML as part of a data: URL, and it comes from the
+// sender: only a plain `type/subtype` gets through.
+const SAFE_MIME_TYPE = /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/;
+
+function imageTypeOf(mimetype?: string | null, filename?: string | null): string | null {
+	const type = (mimetype ?? "").split(";")[0].trim().toLowerCase();
+	if (type.startsWith("image/")) return SAFE_MIME_TYPE.test(type) ? type : null;
+	// Some mailers label inline images application/octet-stream.
+	const extension = filename?.split(".").pop()?.toLowerCase();
+	return (extension && IMAGE_TYPE_BY_EXTENSION[extension]) || null;
+}
+
+function contentIdOf(attachment: InlineAttachment): string | null {
+	const raw = attachment.content_id?.trim();
+	if (!raw) return null;
+	// Strip angle brackets from content_id if present
+	const cid = raw.startsWith("<") && raw.endsWith(">") ? raw.slice(1, -1) : raw;
+	return cid || null;
+}
+
 /**
- * Rewrite CID references in email HTML to API URLs for inline images.
- * Replaces `src="cid:image001@example.com"` with the attachment API endpoint.
+ * Whether an attachment is shown inside the message body: an inline image
+ * with a Content-ID, within the size cap (an unknown size is checked once
+ * fetched). Everything else is listed as an attachment.
  */
-export function rewriteInlineImages(
+export function isInlineImage(attachment: InlineAttachment): boolean {
+	if (attachment.disposition !== "inline" || !contentIdOf(attachment)) return false;
+	if ((attachment.size ?? 0) > INLINE_IMAGE_MAX_BYTES) return false;
+	// No type information at all: the fetched body's type decides.
+	if (!attachment.mimetype && !attachment.filename) return true;
+	return imageTypeOf(attachment.mimetype, attachment.filename) !== null;
+}
+
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** The inline images a body refers to with `cid:`, longest Content-ID first. */
+function referencedInlineImages(body: string, attachments?: InlineAttachment[]) {
+	if (!body || !attachments?.length) return [];
+	const lowerBody = body.toLowerCase();
+	return attachments
+		.filter(isInlineImage)
+		.map((attachment) => ({ attachment, cid: contentIdOf(attachment) as string }))
+		.filter(({ cid }) => lowerBody.includes(`cid:${cid.toLowerCase()}`))
+		// `cid:img10` is rewritten before `cid:img1` can match its head.
+		.sort((a, b) => b.cid.length - a.cid.length);
+}
+
+async function blobToDataUrl(blob: Blob, type: string): Promise<string> {
+	const bytes = new Uint8Array(await blob.arrayBuffer());
+	let binary = "";
+	const chunk = 0x8000;
+	for (let i = 0; i < bytes.length; i += chunk) {
+		binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+	}
+	return `data:${type};base64,${btoa(binary)}`;
+}
+
+/**
+ * Rewrite `cid:` references in email HTML to `data:` URLs for inline images.
+ *
+ * The body renders in a sandboxed `srcdoc` iframe without
+ * `allow-same-origin`: its requests come from an opaque origin and never
+ * carry the gateway's session cookie, so an attachment URL inside it would
+ * answer 401. The page fetches each inline image itself (same-origin, with
+ * the session, through `api.getAttachment`) and inlines it; the iframe's CSP
+ * already allows `img-src data:`. Images over `INLINE_IMAGE_MAX_BYTES`,
+ * non-images and failed fetches keep their `cid:` reference (shown as a
+ * broken image); oversized and non-image ones are listed as attachments.
+ */
+export async function rewriteInlineImages(
 	body: string,
 	mailboxId: string,
 	emailId: string,
-	attachments?: { id: string; content_id?: string | null; disposition?: string | null }[],
-): string {
-	if (!body || !attachments?.length) return body;
+	attachments?: InlineAttachment[],
+	fetchAttachment: FetchAttachment = api.getAttachment,
+): Promise<string> {
+	const images = mailboxId ? referencedInlineImages(body, attachments) : [];
+	if (images.length === 0) return body;
+
+	const resolved = await Promise.all(
+		images.map(async ({ attachment, cid }) => {
+			try {
+				const blob = await fetchAttachment(mailboxId, emailId, attachment.id);
+				if (!(blob instanceof Blob) || blob.size > INLINE_IMAGE_MAX_BYTES) return null;
+				const type =
+					imageTypeOf(attachment.mimetype, attachment.filename) ?? imageTypeOf(blob.type);
+				if (!type) return null;
+				return { cid, url: await blobToDataUrl(blob, type) };
+			} catch {
+				// One image failing to load never stops the message from rendering.
+				return null;
+			}
+		}),
+	);
+
 	let result = body;
-	for (const att of attachments) {
-		if (att.disposition === "inline" && att.content_id) {
-			const url = `/api/v1/mailboxes/${mailboxId}/emails/${emailId}/attachments/${att.id}`;
-			// Strip angle brackets from content_id if present
-			const cid = att.content_id.startsWith("<")
-				? att.content_id.slice(1, -1)
-				: att.content_id;
-			result = result.replace(new RegExp(`cid:${cid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi"), url);
-		}
+	for (const image of resolved) {
+		if (!image) continue;
+		result = result.replace(new RegExp(`cid:${escapeRegExp(image.cid)}`, "gi"), () => image.url);
 	}
 	return result;
 }
 
+/**
+ * The message body with its inline images as `data:` URLs. Renders the body
+ * as it is at first and swaps in the rewritten one once the images are in;
+ * the result is cached per message, so collapsing and expanding a thread
+ * message doesn't fetch them again.
+ */
+export function useInlineImages(
+	body: string,
+	mailboxId: string | undefined,
+	emailId: string,
+	attachments?: InlineAttachment[],
+): string {
+	const needsRewrite = Boolean(mailboxId) && referencedInlineImages(body, attachments).length > 0;
+	const { data } = useQuery({
+		queryKey: ["inline-images", mailboxId, emailId, body],
+		queryFn: () => rewriteInlineImages(body, mailboxId as string, emailId, attachments),
+		enabled: needsRewrite,
+		staleTime: Number.POSITIVE_INFINITY,
+		retry: false,
+	});
+	return needsRewrite ? (data ?? body) : body;
+}
+
+/** The attachments listed under a message: everything not shown inside its body. */
 export function getNonInlineAttachments(attachments?: Attachment[]): Attachment[] {
-	return attachments?.filter((attachment) => attachment.disposition !== "inline") ?? [];
+	return attachments?.filter((attachment) => !isInlineImage(attachment)) ?? [];
 }
 
 export function getAttachmentUrl(
