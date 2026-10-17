@@ -7,7 +7,7 @@ import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { withGateway } from "./everyapp/gateway";
-import { agentGuard, requireOrganization, users } from "./everyapp/identity";
+import { agentGuard, me, requireAdmin, requireOrganization, users } from "./everyapp/identity";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
 import { withNamedAgents } from "./everyapp/inbound";
@@ -44,16 +44,31 @@ app.all("/mcp/*", async (c) => {
 	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
 });
 
+// Every App: who may do what (workers/everyapp/identity.ts). The
+// organization is the boundary, checked at the entry for every request;
+// owners and admins also create and delete mailboxes and edit their
+// settings (the agent's system prompt among them). Registered before the
+// API so the role check runs ahead of upstream's handlers.
+app.get("/api/v1/me", (c) => {
+	const user = users.get(c.req.raw);
+	if (!user) return c.json({ error: "unauthenticated" }, 401);
+	return c.json(me(user, c.env));
+});
+app.post("/api/v1/mailboxes", requireAdmin);
+app.on(["PUT", "DELETE"], "/api/v1/mailboxes/:mailboxId", requireAdmin);
+
 // Mount the API routes
 app.route("/", apiApp);
 
 // Agent WebSocket routing - must be before React Router catch-all.
 // partyserver makes every Durable Object binding addressable by URL; the
-// guard lets only the chat agent through.
+// guard lets only the chat agent of an existing mailbox through.
 app.all("/agents/*", async (c) => {
+	const guard = (request: Request, lobby: { className: string; name: string }) =>
+		agentGuard(request, lobby, c.env);
 	const response = await routeAgentRequest(c.req.raw, c.env, {
-		onBeforeConnect: agentGuard,
-		onBeforeRequest: agentGuard,
+		onBeforeConnect: guard,
+		onBeforeRequest: guard,
 	});
 	if (response) return response;
 	return c.text("Agent not found", 404);
