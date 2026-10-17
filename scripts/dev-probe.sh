@@ -77,8 +77,10 @@ rc=$?
 echo "== HTTP /agents/mailbox/$MAILBOX and /agents/email-mcp/x (must be refused)"
 code=$(curl "${R[@]}" -o /dev/null -w '%{http_code}' "$U/agents/mailbox/$MAILBOX")
 [ "$code" = 404 ] && pass "GET /agents/mailbox/... -> 404" || fail "GET /agents/mailbox/... -> $code"
+# TODO(integration): lane L6 deleted EmailMCP and its EMAIL_MCP binding, so
+# partyserver answers 400 ("Invalid request") for this path before any guard.
 code=$(curl "${R[@]}" -o /dev/null -w '%{http_code}' "$U/agents/email-mcp/x")
-[ "$code" = 404 ] && pass "GET /agents/email-mcp/x -> 404" || fail "GET /agents/email-mcp/x -> $code"
+[ "$code" = 400 ] && pass "GET /agents/email-mcp/x -> 400 (no such binding)" || fail "GET /agents/email-mcp/x -> $code"
 
 if [ -n "$APP_PORT" ]; then
 	echo "== direct hit on the app's Vite port $APP_PORT (bypassing the gateway)"
