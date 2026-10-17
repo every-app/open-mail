@@ -22,6 +22,7 @@ import {
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
+import { withGateway } from "../everyapp/gateway";
 
 /** Wrap a plain result object into MCP content format. */
 function mcpText(result: unknown) {
@@ -68,7 +69,9 @@ export class EmailMCP extends McpAgent<Env> {
 	});
 
 	async init() {
-		const env = this.env;
+		// AI and EMAIL brokered by the gateway (no request starts these calls:
+		// they are the app's own, attributed to its organization).
+		const env = withGateway(this.env);
 
 		/**
 		 * Verify a mailbox exists in R2 before operating on it.

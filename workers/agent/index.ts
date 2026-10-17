@@ -9,7 +9,8 @@ import {
 	convertToModelMessages,
 	stepCountIs,
 } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
+import { agentModelId, aiFailureOf, gatewayModel, withGateway } from "../everyapp/gateway";
+import { aiFailureMessage, aiSetupProblem, chatNotice, chatReply, forMailbox, skipAutoDraft } from "../everyapp/agent-ai";
 import { z } from "zod";
 import type { EmailFull, EmailMetadata } from "../lib/schemas";
 import { verifyDraft, isPromptInjection } from "../lib/ai";
@@ -274,14 +275,17 @@ function createEmailTools(env: Env, mailboxId: string) {
 // is fully typed inside the tools via the closure.
 export class EmailAgent extends AIChatAgent<any> {
 	async onChatMessage(onFinish: any) {
-		const env = this.env as Env;
+		const target = forMailbox(this.env);
+		const env = withGateway(this.env as Env, target);
 		const mailboxId = this.name;
-		const workersai = createWorkersAI({ binding: env.AI });
+		const notSetUp = aiSetupProblem(env, target);
+		if (notSetUp) return chatNotice(notSetUp);
+		const provider = gatewayModel(env, target);
 		const tools = createEmailTools(env, mailboxId);
 		const systemPrompt = await getSystemPrompt(env, mailboxId);
 
 		const result = streamText({
-			model: workersai("@cf/moonshotai/kimi-k2.5"),
+			model: provider.chatModel(agentModelId(env)),
 			system: systemPrompt,
 			messages: await convertToModelMessages(this.messages),
 			tools,
@@ -289,7 +293,7 @@ export class EmailAgent extends AIChatAgent<any> {
 			onFinish,
 		});
 
-		return result.toUIMessageStreamResponse();
+		return chatReply(result.toUIMessageStream({ onError: (error) => aiFailureMessage(env, error) }));
 	}
 
 	/**
@@ -333,8 +337,11 @@ export class EmailAgent extends AIChatAgent<any> {
 		subject: string;
 		threadId: string;
 	}) {
-		const env = this.env as Env;
-		const workersai = createWorkersAI({ binding: env.AI });
+		const target = forMailbox(this.env);
+		const env = withGateway(this.env as Env, target);
+		const notSetUp = aiSetupProblem(env, target);
+		if (notSetUp) return skipAutoDraft(this, emailData, notSetUp);
+		const provider = gatewayModel(env, target);
 		const tools = createEmailTools(env, emailData.mailboxId);
 		const systemPrompt = await getSystemPrompt(env, emailData.mailboxId);
 
@@ -348,6 +355,9 @@ export class EmailAgent extends AIChatAgent<any> {
 			const email = (await stub.getEmail(emailData.emailId)) as EmailFull | null;
 			if (email?.body) {
 				const isInjection = await isPromptInjection(env.AI, email.body);
+				// The scanner fails closed: a scan that didn't run is no verdict.
+				const scanFailure = isInjection && aiFailureOf(env.AI);
+				if (scanFailure) return skipAutoDraft(this, emailData, `the prompt-injection scan couldn't run (${scanFailure})`);
 				if (isInjection) {
 					console.warn("Skipping auto-draft due to detected prompt injection:", emailData.emailId);
 					
@@ -396,6 +406,8 @@ export class EmailAgent extends AIChatAgent<any> {
 			// that gets included in the agent's prompt.
 			if (threadContext) {
 				const threadInjection = await isPromptInjection(env.AI, threadContext);
+				const threadScanFailure = threadInjection && aiFailureOf(env.AI);
+				if (threadScanFailure) return skipAutoDraft(this, emailData, `the prompt-injection scan couldn't run (${threadScanFailure})`);
 				if (threadInjection) {
 					console.warn("Skipping auto-draft due to prompt injection in thread context:", emailData.threadId);
 					const newMessages = [
@@ -463,7 +475,7 @@ Based on the email content and thread context above, draft a reply using draft_r
 
 		try {
 			const result = await generateText({
-				model: workersai("@cf/moonshotai/kimi-k2.5"),
+				model: provider.chatModel(agentModelId(env)),
 				system: systemPrompt,
 				messages: await convertToModelMessages(messages),
 				tools,
