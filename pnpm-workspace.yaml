@@ -1,0 +1,44 @@
+# A single-package workspace: this file makes the venue its own pnpm root
+# (pnpm never climbs into a parent workspace) and holds pnpm's settings.
+packages:
+  - "."
+
+# The npm `overrides` upstream ships, in pnpm's form.
+overrides:
+  # @cloudflare/kumo bundles zod 4 types against the app's zod 3.25 schemas;
+  # upstream pins kumo's zod to the app's own.
+  "@cloudflare/kumo>zod": "$zod"
+  # TipTap: one version across the editor's packages.
+  "@tiptap/core": "3.20.2"
+  "@tiptap/pm": "3.20.2"
+  "@tiptap/extensions": "3.20.2"
+  "@tiptap/extension-blockquote": "3.20.2"
+  "@tiptap/extension-bold": "3.20.2"
+  "@tiptap/extension-bubble-menu": "3.20.2"
+  "@tiptap/extension-bullet-list": "3.20.2"
+  "@tiptap/extension-code": "3.20.2"
+  "@tiptap/extension-code-block": "3.20.2"
+  "@tiptap/extension-document": "3.20.2"
+  "@tiptap/extension-dropcursor": "3.20.2"
+  "@tiptap/extension-floating-menu": "3.20.2"
+  "@tiptap/extension-gapcursor": "3.20.2"
+  "@tiptap/extension-hard-break": "3.20.2"
+  "@tiptap/extension-heading": "3.20.2"
+  "@tiptap/extension-horizontal-rule": "3.20.2"
+  "@tiptap/extension-italic": "3.20.2"
+  "@tiptap/extension-list": "3.20.2"
+  "@tiptap/extension-list-item": "3.20.2"
+  "@tiptap/extension-list-keymap": "3.20.2"
+  "@tiptap/extension-ordered-list": "3.20.2"
+  "@tiptap/extension-paragraph": "3.20.2"
+  "@tiptap/extension-strike": "3.20.2"
+  "@tiptap/extension-text": "3.20.2"
+
+# Install scripts stay off: esbuild and workerd run from their optional
+# platform packages, sharp from its prebuilt @img/* packages, and
+# core-js-pure's postinstall is a banner.
+ignoredBuiltDependencies:
+  - core-js-pure
+  - esbuild
+  - sharp
+  - workerd
