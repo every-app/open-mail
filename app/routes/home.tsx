@@ -57,6 +57,9 @@ export default function HomeRoute() {
 	// (GET /api/v1/me). Owners and admins create and delete mailboxes;
 	// members use them. The Worker enforces this (workers/everyapp/identity.ts);
 	// the page only hides what it would refuse.
+	// TODO(integration): lane L4 adds `meQuery` (same key and body) to
+	// ~/services/api; use it here once both lanes are merged, so a 401 on
+	// this request reloads into the gateway's sign-in like the others.
 	const { data: me } = useQuery({
 		queryKey: ["me"],
 		queryFn: async (): Promise<Me> => {
