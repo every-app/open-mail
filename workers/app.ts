@@ -2,10 +2,12 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { everyApp } from "@every-app/sdk/server";
 import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
-import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
+import { withGateway } from "./everyapp/gateway";
+import { agentGuard, requireOrganization, users } from "./everyapp/identity";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
 import type { Env } from "./types";
@@ -28,57 +30,8 @@ const requestHandler = createRequestHandler(
 	import.meta.env.MODE,
 );
 
-function getAccessUrls(teamDomain: string) {
-	const certsPath = "/cdn-cgi/access/certs";
-	const teamUrl = new URL(teamDomain);
-	const issuer = teamUrl.origin;
-	const certsUrl = teamUrl.pathname.endsWith(certsPath)
-		? teamUrl
-		: new URL(certsPath, issuer);
-
-	return { issuer, certsUrl };
-}
-
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
-
-// Cloudflare Access JWT validation middleware (production only)
-app.use("*", async (c, next) => {
-	// Skip validation in development
-	if (import.meta.env.DEV) {
-		return next();
-	}
-
-	const { POLICY_AUD, TEAM_DOMAIN } = c.env;
-
-	// Fail closed in production if Access is not configured.
-	if (!POLICY_AUD || !TEAM_DOMAIN) {
-		return c.text(
-			"Cloudflare Access must be configured in production. Set POLICY_AUD and TEAM_DOMAIN.",
-			500,
-		);
-	}
-
-	const token = c.req.header("cf-access-jwt-assertion");
-	if (!token) {
-		return c.text("Missing required CF Access JWT", 403);
-	}
-
-	try {
-		const { issuer, certsUrl } = getAccessUrls(TEAM_DOMAIN);
-		const JWKS = createRemoteJWKSet(certsUrl);
-		await jwtVerify(token, JWKS, {
-			issuer,
-			audience: POLICY_AUD,
-		});
-	} catch {
-		return c.text("Invalid or expired Access token", 403);
-	}
-
-	// Authorization model note: once a teammate passes the shared Cloudflare
-	// Access policy, they can access all mailboxes in this app by design.
-	return next();
-});
 
 // MCP server endpoint — used by AI coding tools (ProtoAgent, Claude Code, Cursor, etc.)
 // Must be before API routes and React Router catch-all
@@ -93,9 +46,14 @@ app.all("/mcp/*", async (c) => {
 // Mount the API routes
 app.route("/", apiApp);
 
-// Agent WebSocket routing - must be before React Router catch-all
+// Agent WebSocket routing - must be before React Router catch-all.
+// partyserver makes every Durable Object binding addressable by URL; the
+// guard lets only the chat agent through.
 app.all("/agents/*", async (c) => {
-	const response = await routeAgentRequest(c.req.raw, c.env);
+	const response = await routeAgentRequest(c.req.raw, c.env, {
+		onBeforeConnect: agentGuard,
+		onBeforeRequest: agentGuard,
+	});
 	if (response) return response;
 	return c.text("Agent not found", 404);
 });
@@ -107,9 +65,19 @@ app.all("*", (c) => {
 	});
 });
 
-// Export the Hono app as the default export with an email handler
+// The default export: everyApp() verifies the identity the gateway puts on
+// every request before any app code runs (the gateway is the identity
+// boundary; Cloudflare Access is gone), then the Hono app runs with the env
+// upstream's code expects (withGateway(): AI and EMAIL brokered by the
+// gateway, attributed to the request's person). The email handler sits
+// beside it, fed by an Email Routing rule that names this Worker.
 export default {
-	fetch: app.fetch,
+	...everyApp<Cloudflare.Env>(async (request, env, ctx, user) => {
+		const refused = requireOrganization(env, user);
+		if (refused) return refused;
+		users.set(request, user);
+		return app.fetch(request, withGateway(env, request), ctx as ExecutionContext);
+	}),
 	async email(
 		event: { raw: ReadableStream; rawSize: number },
 		env: Env,
