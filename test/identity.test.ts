@@ -167,7 +167,8 @@ function makeEnv(extra: Record<string, unknown> = {}) {
 	return { env, bucket, agentCalls };
 }
 
-const ctx = { waitUntil() {}, passThroughOnException() {} };
+// The runtime's ExecutionContext, as far as the entry uses it.
+const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
 
 async function identity(orgRole: string, orgId = ORG) {
 	return mintIdentityJwt(privateKeyPem, {
