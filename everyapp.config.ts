@@ -20,9 +20,12 @@ export default {
   // OpenRouter with AI_PROVIDER=openrouter (workers/everyapp/gateway.ts).
   providers: ["workers-ai", "openrouter"],
   // `ai.models` (the model ids the app may request) arrives with lane L1.
-  // `capabilities.email` arrives with lane L2, once the gateway's email
-  // capability is in the linked platform checkout: the CLI validates the
-  // manifest strictly and refuses an unknown capability id until then.
+  // TODO(integration): lane inbox-L2b adds, once the gateway's email
+  // capability (platform PR 3) is in the linked platform checkout (the CLI
+  // validates the manifest strictly and refuses the unknown id until then):
+  //   capabilities: { email: { access: "write", why: "Sends mail from the
+  //     organization's mailboxes on its own domain.", senders: ["*@example.com"] } },
+  // cloudflare.config.ts derives DOMAINS from `senders`.
   mcp: "app",
   // Every member of the organization may open the inbox; owners and admins
   // manage mailboxes in the app.
