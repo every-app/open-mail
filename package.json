@@ -4,31 +4,21 @@
 	"license": "Apache-2.0",
 	"type": "module",
 	"packageManager": "pnpm@10.34.5",
-	"cloudflare": {
-		"label": "Agentic Inbox",
-		"products": [
-			"Workers",
-			"Durable Objects",
-			"R2",
-			"Workers AI"
-		],
-		"bindings": {
-			"DOMAINS": {
-				"description": "Your domain with [Email Routing](https://developers.cloudflare.com/email-routing/) enabled (e.g. `example.com`). After deploying, create a catch-all Email Routing rule pointing to this Worker."
-			}
-		}
-	},
 	"scripts": {
-		"build": "react-router build",
-		"cf-typegen": "wrangler types",
-		"deploy": "npm run build && wrangler deploy",
-		"dev": "react-router dev",
-		"preview": "npm run build && vite preview",
-		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+		"dev": "everyapp dev",
+		"dev:vite": "cf dev",
+		"build": "vite build --mode development && tsc --noEmit",
+		"deploy": "everyapp deploy",
+		"types:check": "cf workers types && react-router typegen --mode development && tsc --noEmit",
+		"test": "vitest run",
+		"check:deploy": "tsx scripts/offline-deploy-check.ts"
 	},
 	"dependencies": {
+		"@ai-sdk/openai-compatible": "~2.0.85",
 		"@cloudflare/ai-chat": "^0.1.8",
 		"@cloudflare/kumo": "^1.13.0",
+		"@every-app/sdk": "link:../private-every-app/packages/sdk",
+		"@modelcontextprotocol/sdk": "1.26.0",
 		"@phosphor-icons/react": "^2.1.10",
 		"@tanstack/react-query": "^5.99.0",
 		"@tiptap/extension-color": "3.20.2",
@@ -46,30 +36,33 @@
 		"drizzle-orm": "^0.45.1",
 		"hono": "^4.7.11",
 		"isbot": "^5.1.27",
-		"jose": "^6.2.1",
 		"postal-mime": "^2.6.1",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
 		"react-markdown": "^10.1.0",
-		"react-router": "^7.5.3",
+		"react-router": "7.13.1",
 		"remark-gfm": "^4.0.1",
 		"workers-ai-provider": "^3.1.2",
 		"zod": "^3.25.76",
 		"zustand": "^5.0.12"
 	},
 	"devDependencies": {
-		"@cloudflare/vite-plugin": "^1.0.12",
+		"@cloudflare/vite-plugin": "2.0.0-beta.sha-91c870c02",
 		"@cloudflare/workers-types": "^4.20251128.0",
-		"@react-router/dev": "^7.5.3",
+		"@react-router/dev": "7.13.1",
 		"@tailwindcss/vite": "^4.1.4",
 		"@types/dompurify": "^3.0.5",
 		"@types/node": "^20.19.37",
 		"@types/react": "^19.1.2",
 		"@types/react-dom": "^19.1.2",
+		"cf": "1.0.0-beta.14",
+		"everyapp": "link:../private-every-app/packages/cli",
 		"tailwindcss": "^4.1.4",
+		"tsx": "^4.20.6",
 		"typescript": "^5.8.3",
-		"vite": "^6.3.3",
+		"vite": "^7.1.2",
 		"vite-tsconfig-paths": "^5.1.4",
-		"wrangler": "^4.74.0"
+		"vitest": "^3.2.4",
+		"ws": "^8.21.0"
 	}
 }
