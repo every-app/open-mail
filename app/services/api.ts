@@ -37,10 +37,17 @@ const REFUSAL_MESSAGES: Record<string, string> = {
 	unauthenticated: "Your session has ended. Reload the page to sign in again.",
 };
 
-function refusalMessage(status: number, body: Record<string, unknown>): string {
-	const text = (value: unknown) =>
-		typeof value === "string" && value.trim() ? value : undefined;
+const text = (value: unknown) =>
+	typeof value === "string" && value.trim() ? value : undefined;
+
+/** A machine code (`email_sender_not_allowed`), never upstream's readable `error` text. */
+function refusalCode(body: Record<string, unknown>): string | undefined {
 	const code = text(body.code) ?? text(body.error);
+	return code && /^[a-z][a-z0-9_]*$/.test(code) ? code : undefined;
+}
+
+function refusalMessage(status: number, body: Record<string, unknown>): string {
+	const code = refusalCode(body);
 	return (
 		(code && REFUSAL_MESSAGES[code]) ||
 		text(body.message) ||
@@ -51,7 +58,7 @@ function refusalMessage(status: number, body: Record<string, unknown>): string {
 
 export class ApiError extends Error {
 	status: number;
-	/** The refusal code (`body.code`, else `body.error`), e.g. `email_sender_not_allowed`. */
+	/** The refusal code (`body.code`, else a code-shaped `body.error`), e.g. `email_sender_not_allowed`. */
 	code: string | undefined;
 	body: Record<string, unknown>;
 
@@ -59,8 +66,7 @@ export class ApiError extends Error {
 		super(refusalMessage(status, body));
 		this.name = "ApiError";
 		this.status = status;
-		const code = body.code ?? body.error;
-		this.code = typeof code === "string" ? code : undefined;
+		this.code = refusalCode(body);
 		this.body = body;
 	}
 }

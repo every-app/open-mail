@@ -81,6 +81,7 @@ describe("send refusals", () => {
 		const notFound = await refusal(api.getMailbox("nobody@example.com"));
 		expect(notFound.message).toBe("Mailbox not found");
 		expect(notFound.status).toBe(404);
+		expect(notFound.code).toBeUndefined();
 
 		respond(500, {});
 		expect((await refusal(api.listMailboxes())).message).toBe("Request failed: 500");
