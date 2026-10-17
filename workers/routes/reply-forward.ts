@@ -17,6 +17,7 @@ import {
 import { SendEmailRequestSchema } from "../lib/schemas";
 import { Folders } from "../../shared/folders";
 import type { MailboxContext } from "../lib/mailbox";
+import { discardAttachments, sendFailure } from "../everyapp/email";
 
 type AppContext = Context<MailboxContext>;
 type RateLimitStub = { checkSendRateLimit: () => Promise<string | null> };
@@ -55,6 +56,31 @@ export async function handleReplyEmail(c: AppContext) {
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	// Every App: the send is awaited, so a refusal reaches the person (502
+	// with the gateway's code); the Sent row and the read mark follow it.
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+			headers: buildThreadingHeaders(originalMsgId, references),
+		});
+	} catch (e) {
+		await discardAttachments(c.env.BUCKET, messageId, attachmentData);
+		return c.json(sendFailure(e), 502);
+	}
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -87,29 +113,7 @@ export async function handleReplyEmail(c: AppContext) {
 
 	await stub.markThreadRead(thread_id);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-			headers: buildThreadingHeaders(originalMsgId, references),
-		}).catch((e) => {
-			console.error("Deferred reply delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 200);
 }
 
 export async function handleForwardEmail(c: AppContext) {
@@ -145,6 +149,30 @@ export async function handleForwardEmail(c: AppContext) {
 
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	// Every App: the send is awaited, so a refusal reaches the person (502
+	// with the gateway's code); the Sent row follows it.
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to,
+			cc,
+			bcc,
+			from,
+			subject,
+			html,
+			text,
+			attachments: attachments?.map((att) => ({
+				content: att.content,
+				filename: att.filename,
+				type: att.type,
+				disposition: att.disposition,
+				contentId: att.contentId,
+			})),
+		});
+	} catch (e) {
+		await discardAttachments(c.env.BUCKET, messageId, attachmentData);
+		return c.json(sendFailure(e), 502);
+	}
+
 	await stub.createEmail(
 		Folders.SENT,
 		{
@@ -173,26 +201,5 @@ export async function handleForwardEmail(c: AppContext) {
 		attachmentData,
 	);
 
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to,
-			cc,
-			bcc,
-			from,
-			subject,
-			html,
-			text,
-			attachments: attachments?.map((att) => ({
-				content: att.content,
-				filename: att.filename,
-				type: att.type,
-				disposition: att.disposition,
-				contentId: att.contentId,
-			})),
-		}).catch((e) => {
-			console.error("Deferred forward delivery failed:", (e as Error).message);
-		}),
-	);
-
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 200);
 }

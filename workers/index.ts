@@ -20,6 +20,7 @@ import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
+import { discardAttachments, emailSendingReady, sendFailure } from "./everyapp/email";
 
 type AppContext = Context<MailboxContext>;
 
@@ -85,11 +86,14 @@ app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 
 // -- Config ---------------------------------------------------------
 
-app.get("/api/v1/config", (c) => {
+app.get("/api/v1/config", async (c) => {
 	const domainsRaw = c.env.DOMAINS || "";
 	const domains = domainsRaw.split(",").map((d) => d.trim()).filter(Boolean);
 	const emailAddresses = c.env.EMAIL_ADDRESSES ?? [];
-	return c.json({ domains, emailAddresses });
+	// Every App: whether the gateway would send (its email capability is
+	// granted and configured), so the UI can say sending isn't set up.
+	const ready = await emailSendingReady(c.env);
+	return c.json({ domains, emailAddresses, ready });
 });
 
 // -- Mailboxes ------------------------------------------------------
@@ -184,6 +188,20 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 	if (rateLimitError) return c.json({ error: rateLimitError }, 429);
 	const attachmentData = await storeAttachments(c.env.BUCKET, messageId, attachments);
 
+	// Every App: the send is awaited, so a refused sender or an exhausted
+	// budget reaches the person (502 with the gateway's code) instead of a
+	// Sent copy of mail that never left; the Sent row follows the send.
+	try {
+		await sendEmail(c.env.EMAIL, {
+			to, cc, bcc, from, subject, html, text,
+			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
+			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
+		});
+	} catch (e) {
+		await discardAttachments(c.env.BUCKET, messageId, attachmentData);
+		return c.json(sendFailure(e), 502);
+	}
+
 	await stub.createEmail(Folders.SENT, {
 		id: messageId, subject, sender: fromEmail, recipient: toStr,
 		cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc).toLowerCase() : null,
@@ -200,15 +218,7 @@ app.post("/api/v1/mailboxes/:mailboxId/emails", async (c: AppContext) => {
 			{ key: "message-id", value: `<${outgoingMessageId}>` },
 		]),
 	}, attachmentData);
-
-	c.executionCtx.waitUntil(
-		sendEmail(c.env.EMAIL, {
-			to, cc, bcc, from, subject, html, text,
-			attachments: attachments?.map((att) => ({ content: att.content, filename: att.filename, type: att.type, disposition: att.disposition || "attachment", contentId: att.contentId })),
-			...(in_reply_to ? { headers: buildThreadingHeaders(in_reply_to, references || []) } : {}),
-		}).catch((e) => console.error("Deferred email delivery failed:", (e as Error).message)),
-	);
-	return c.json({ id: messageId, status: "sent" }, 202);
+	return c.json({ id: messageId, status: "sent" }, 200);
 });
 
 app.post("/api/v1/mailboxes/:mailboxId/drafts", async (c: AppContext) => {
