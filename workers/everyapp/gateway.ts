@@ -181,8 +181,8 @@ export function agentModelId(env: ProviderEnv): string {
 }
 
 /**
- * `env.EMAIL`: the gateway's email capability as a `send_email` binding
- * (lane L2; the adapter and its stand-in live in ./email.ts).
+ * `env.EMAIL`: the gateway's email capability as a `send_email` binding,
+ * over the SDK's sendEmail() (lane L2; the adapter lives in ./email.ts).
  */
 export { gatewayEmail };
 

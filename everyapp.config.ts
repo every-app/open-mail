@@ -35,9 +35,20 @@ export default {
       "moonshotai/kimi-k2.6",
     ],
   },
-  // `capabilities.email` arrives with lane L2, once the gateway's email
-  // capability is in the linked platform checkout: the CLI validates the
-  // manifest strictly and refuses an unknown capability id until then.
+  // Outbound mail goes through the gateway's email capability
+  // (workers/everyapp/email.ts): each mailbox sends from its own address,
+  // and the gateway refuses a From that no `senders` pattern matches.
+  // `senders` names the sending domains, one "*@<domain>" per domain
+  // onboarded to Email Sending in the gateway's Cloudflare account (at most
+  // 20, lowercase). The domains offered for new mailboxes (DOMAINS) are
+  // derived from this list in cloudflare.config.ts. Edit it, then redeploy.
+  capabilities: {
+    email: {
+      access: "write",
+      why: "Sends mail from the organization's mailboxes on its own domain.",
+      senders: ["*@example.com"],
+    },
+  },
   mcp: "app",
   // Every member of the organization may open the inbox; owners and admins
   // manage mailboxes in the app.
