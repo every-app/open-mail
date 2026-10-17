@@ -18,14 +18,13 @@ This fork runs as a private app behind an [Every App](https://github.com/every-a
 
 In short, with a gateway installed (`pnpm everyapp setup` in the Every App checkout) on Workers Paid:
 
-1. **Workers AI**: from the Every App checkout, `pnpm everyapp secret set WORKERS_AI_API_TOKEN --for gateway` (an API token with Workers AI Read).
-2. **Your mail domain**: onboard it to Email Sending and enable Email Routing on its zone.
-3. **Declare the sending domains** in `everyapp.config.ts` (`capabilities.email.senders: ["*@example.com"]`).
-4. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It prints the Worker's name, `every-<orgKey>-agentic-inbox`.
-5. **Route inbound mail**: an Email Routing catch-all rule, "Send to a Worker", naming that Worker.
-6. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
+1. **Workers AI**: from the Every App checkout, `pnpm everyapp secret set WORKERS_AI_API_TOKEN --for gateway` (an API token from the "Workers AI" template, Read and Edit).
+2. **Your mail domain**: onboard it to Email Sending (its zone on Cloudflare DNS in the gateway's account).
+3. **Declare your mail domain** in `everyapp.config.ts`: the senders (`capabilities.email.senders: ["*@example.com"]`) and the inbound addresses (`email.inbound: ["*@example.com"]`).
+4. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It uploads the Worker `every-<orgKey>-agentic-inbox`, turns on Email Routing for the domain if you agree, and creates the catch-all rule that hands inbound mail to the Worker.
+5. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
 
-Some of these steps wait on Every App platform changes that haven't merged yet; the runbook marks each one.
+Nothing has been deployed to a real account yet; the runbook's "Verified locally" section shows the local end-to-end run, and `TODO.md` lists what the first live deploy has to check.
 
 ## Features
 
