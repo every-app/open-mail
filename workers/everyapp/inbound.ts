@@ -12,8 +12,10 @@
  * the way routeAgentRequest() does (the `x-partykit-room` header), which also
  * stores the name for later requests.
  */
-export function withNamedAgents<E extends { EMAIL_AGENT: DurableObjectNamespace<any> }>(env: E): E {
-	const namespace = env.EMAIL_AGENT;
+export function withNamedAgents<E extends { EMAIL_AGENT: unknown }>(env: E): E {
+	// Untyped on purpose: the stub's RPC type is irrelevant here (and too deep
+	// for tsc to instantiate generically).
+	const namespace = env.EMAIL_AGENT as DurableObjectNamespace;
 	const names = new Map<string, string>();
 	const emailAgent = {
 		idFromName(name: string): DurableObjectId {
