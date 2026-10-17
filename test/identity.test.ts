@@ -8,9 +8,9 @@
 // partyserver 0.3.3 does, below), the chat agent's base class and the
 // mailbox Durable Object. The real router is exercised by `everyapp dev`
 // (scripts/dev-probe.sh).
-// TODO(integration): lane L6 deleted EmailMCP (workers/mcp/), so its mock and
-// the EMAIL_MCP binding are gone here, and /agents/email-mcp/x now names no
-// binding at all (partyserver answers 400 before any guard runs).
+// There is no EmailMCP any more (the MCP tools are workers/everyapp/tools.ts),
+// so /agents/email-mcp/x names no binding at all (partyserver answers 400
+// before any guard runs).
 import { generateKeyPairSync } from "node:crypto";
 import { mintIdentityJwt } from "@every-app/sdk/internal";
 import { beforeAll, describe, expect, it, vi } from "vitest";

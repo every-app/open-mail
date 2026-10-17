@@ -118,7 +118,7 @@ export function me(user: EveryAppUser, env: object): Me {
  *
  * partyserver makes every Durable Object binding addressable as
  * /agents/<kebab-case binding>/<name>; only the chat agent may be, so the
- * mailbox and MCP objects stay internal. `lobby.className` is the env
+ * mailbox objects stay internal. `lobby.className` is the env
  * binding's name (partyserver 0.3.3 maps the URL segment back to the key it
  * found in env), so the check is against EMAIL_AGENT.
  *

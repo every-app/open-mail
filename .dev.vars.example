@@ -4,14 +4,18 @@
 # AI: the app calls models through the gateway's AI proxy. With no gateway in
 # development, one provider key here is used directly (billed to you).
 #
-# Workers AI (the default, AI_PROVIDER=workers-ai): an API token with
-# "Workers AI Read" and its account id.
+# Workers AI (the default, AI_PROVIDER=workers-ai): an API token made from the
+# "Workers AI" template (Workers AI Read and Edit) and its account id.
 # WORKERS_AI_API_TOKEN=
 # CLOUDFLARE_ACCOUNT_ID=
 #
 # Or OpenRouter: run with AI_PROVIDER=openrouter in the environment.
 # OPENROUTER_API_KEY=
 #
-# Email: sends are logged unless these are set (Email Sending REST API).
+# Email: the SDK checks each send against the manifest's senders and prints
+# it. With all three of EMAIL_REST_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (above)
+# and EMAIL_FROM it sends through the Email Sending REST API instead, on your
+# account. EMAIL_FROM alone makes GET /api/v1/config say ready: true.
 # EMAIL_REST_API_TOKEN=
 # EMAIL_FROM=
+# EMAIL_FROM_NAME=
