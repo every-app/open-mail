@@ -35,10 +35,14 @@ if (mode === "manifest") {
 	const manifest = (await (loadEveryAppManifest as (cwd: string) => Promise<unknown>)(appDir)) as {
 		id: string;
 		resources?: { durableObjects?: { className: string }[] };
+		capabilities?: { email?: { senders?: string[] } };
+		email?: { inbound?: string[] };
 	};
 	result({
 		id: manifest.id,
 		durableObjects: (manifest.resources?.durableObjects ?? []).map((d) => d.className),
+		senders: manifest.capabilities?.email?.senders ?? [],
+		inbound: manifest.email?.inbound ?? [],
 	});
 } else {
 	if (!workerName) throw new Error("build-output needs the worker name");

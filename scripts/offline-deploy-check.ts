@@ -4,7 +4,8 @@
 //  1. writes a fake .everyapp/deploy.json (the inputs `everyapp deploy`
 //     writes from the gateway's registry; Worker every-acme-agentic-inbox,
 //     the identity key in test/fixtures/identity.pem);
-//  2. validates everyapp.config.ts with the CLI's strict schema;
+//  2. validates everyapp.config.ts with the CLI's strict schema, and that
+//     every email.inbound domain is one of the senders' domains;
 //  3. builds for production (`cf build`), logins hidden;
 //  4. runs the CLI's appPolicyProblems()/prepareAppBuildOutput() on the
 //     Build Output (scripts/policy-check.ts, through jiti);
@@ -42,7 +43,7 @@ for (const name of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_EM
 	delete childEnv[name];
 }
 // The build reads these; the check covers the defaults.
-for (const name of ["AI_PROVIDER", "AGENT_MODEL", "INBOX_DOMAINS"]) delete childEnv[name];
+for (const name of ["AI_PROVIDER", "AGENT_MODEL"]) delete childEnv[name];
 
 function run(what: string, command: string, args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}): string {
 	console.log(`\n$ ${what}`);
@@ -97,8 +98,21 @@ try {
 		)}\n`,
 	);
 
-	const manifest = policyCheck(["manifest", appDir]).result as { id: string; durableObjects: string[] };
+	const manifest = policyCheck(["manifest", appDir]).result as {
+		id: string;
+		durableObjects: string[];
+		senders: string[];
+		inbound: string[];
+	};
 	check(manifest.id === "agentic-inbox", "manifest validates strictly (id agentic-inbox)", manifest);
+	// Mailboxes are created only on the senders' domains (DOMAINS), and
+	// mail to an address without a mailbox is dropped: an inbound domain
+	// outside them would route mail nobody can receive.
+	const domainOf = (address: string) => address.slice(address.lastIndexOf("@") + 1).toLowerCase();
+	const senderDomains = [...new Set(manifest.senders.map(domainOf))];
+	const strayInbound = manifest.inbound.filter((address) => !senderDomains.includes(domainOf(address)));
+	check(manifest.inbound.length > 0, `email.inbound routes mail to the Worker (${manifest.inbound.join(", ")})`, manifest.inbound);
+	check(strayInbound.length === 0, "every email.inbound domain is a senders domain (mailboxes can exist there)", strayInbound);
 
 	// A clean production build: no stale development output.
 	fs.rmSync(outputDir, { recursive: true, force: true });
@@ -127,7 +141,7 @@ try {
 	check(config.name === WORKER, `worker name is ${WORKER}`, config.name);
 	check(
 		JSON.stringify(exportsSeen) === JSON.stringify([...manifest.durableObjects].sort()) &&
-			// TODO(integration): lane L6 deleted EmailMCP; the exports are exactly these two.
+			// Exactly these two: the MCP tools are a defineTools() catalog, not a Durable Object.
 			JSON.stringify(exportsSeen) === JSON.stringify(["EmailAgent", "MailboxDO"]),
 		`exports are the manifest's Durable Objects (${manifest.durableObjects.join(", ")})`,
 		exportsSeen,
@@ -143,7 +157,7 @@ try {
 	const refusedKinds = Object.entries(env).filter(([name, b]) => name === "AI" || name === "EMAIL" || b.type === "ai" || b.type === "send-email");
 	check(refusedKinds.length === 0, "no AI or send-email binding", refusedKinds);
 	check((config.compatibilityFlags ?? []).includes("nodejs_compat"), "compatibilityFlags has nodejs_compat", config.compatibilityFlags);
-	check(env["DOMAINS"]?.type === "text" && env["DOMAINS"].value === "example.com", "DOMAINS defaults to example.com", env["DOMAINS"]);
+	check(env["DOMAINS"]?.type === "text" && env["DOMAINS"].value === senderDomains.join(","), `DOMAINS is the senders' domains (${senderDomains.join(",")})`, env["DOMAINS"]);
 	check(env["EMAIL_ADDRESSES"]?.type === "json" && JSON.stringify(env["EMAIL_ADDRESSES"].value) === "[]", "EMAIL_ADDRESSES is []", env["EMAIL_ADDRESSES"]);
 	check(env["AI_PROVIDER"]?.type === "text" && env["AI_PROVIDER"].value === "workers-ai", "AI_PROVIDER defaults to workers-ai", env["AI_PROVIDER"]);
 	const secrets = Object.entries(env).filter(([, b]) => b.type === "secret").map(([name]) => name).sort();
