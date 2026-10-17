@@ -7,13 +7,10 @@ export default {
     "A team inbox with an AI agent: receive, read, draft and send email on your own domain.",
   resources: {
     // SQLite Durable Objects, exported by workers/app.ts. MAILBOX holds one
-    // mailbox's folders and emails, EMAIL_AGENT its chat agent. EMAIL_MCP is
-    // the app's own MCP server, kept until the defineTools() catalog
-    // replaces it (lane L6 deletes it with `mcp: "app"`).
+    // mailbox's folders and emails, EMAIL_AGENT its chat agent.
     durableObjects: [
       { name: "MAILBOX", className: "MailboxDO" },
       { name: "EMAIL_AGENT", className: "EmailAgent" },
-      { name: "EMAIL_MCP", className: "EmailMCP" },
     ],
   },
   // Model calls go through the gateway's AI proxy: Workers AI by default,
@@ -49,7 +46,8 @@ export default {
       senders: ["*@example.com"],
     },
   },
-  mcp: "app",
+  // No `mcp` setting: the gateway serves `/mcp` from the app's defineTools()
+  // catalog (workers/everyapp/tools.ts).
   // Every member of the organization may open the inbox; owners and admins
   // manage mailboxes in the app.
   access: "everyone",

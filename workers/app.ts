@@ -9,13 +9,12 @@ import { createRequestHandler } from "react-router";
 import { withGateway } from "./everyapp/gateway";
 import { agentGuard, me, requireAdmin, requireOrganization, users } from "./everyapp/identity";
 import { app as apiApp, receiveEmail } from "./index";
-import { EmailMCP } from "./mcp";
 import { withNamedAgents } from "./everyapp/inbound";
+import { tools } from "./everyapp/tools";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
 export { EmailAgent } from "./agent";
-export { EmailMCP } from "./mcp";
 
 declare module "react-router" {
 	export interface AppLoadContext {
@@ -33,16 +32,6 @@ const requestHandler = createRequestHandler(
 
 // Main app that wraps the API and adds React Router fallback
 const app = new Hono<{ Bindings: Env }>();
-
-// MCP server endpoint — used by AI coding tools (ProtoAgent, Claude Code, Cursor, etc.)
-// Must be before API routes and React Router catch-all
-const mcpHandler = EmailMCP.serve("/mcp", { binding: "EMAIL_MCP" });
-app.all("/mcp", async (c) => {
-	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
-});
-app.all("/mcp/*", async (c) => {
-	return mcpHandler.fetch(c.req.raw, c.env, c.executionCtx as ExecutionContext);
-});
 
 // Every App: who may do what (workers/everyapp/identity.ts). The
 // organization is the boundary, checked at the entry for every request;
@@ -85,15 +74,21 @@ app.all("*", (c) => {
 // every request before any app code runs (the gateway is the identity
 // boundary; Cloudflare Access is gone), then the Hono app runs with the env
 // upstream's code expects (withGateway(): AI and EMAIL brokered by the
-// gateway, attributed to the request's person). The email handler sits
-// beside it, fed by an Email Routing rule that names this Worker.
+// gateway, attributed to the request's person). everyApp() also answers the
+// gateway's tools contract (`/__everyapp/tools/*`) from the MCP catalog
+// (workers/everyapp/tools.ts): MCP clients reach the tools through the
+// gateway's `/mcp`, which the app never serves itself. The email handler
+// sits beside it, fed by an Email Routing rule that names this Worker.
 export default {
-	...everyApp<Cloudflare.Env>(async (request, env, ctx, user) => {
-		const refused = requireOrganization(env, user);
-		if (refused) return refused;
-		users.set(request, user);
-		return app.fetch(request, withGateway(env, request), ctx as ExecutionContext);
-	}),
+	...everyApp<Cloudflare.Env>(
+		async (request, env, ctx, user) => {
+			const refused = requireOrganization(env, user);
+			if (refused) return refused;
+			users.set(request, user);
+			return app.fetch(request, withGateway(env, request), ctx as ExecutionContext);
+		},
+		{ tools },
+	),
 	async email(
 		event: { raw: ReadableStream; rawSize: number },
 		env: Env,

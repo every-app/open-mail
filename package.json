@@ -19,7 +19,6 @@
 		"@cloudflare/ai-chat": "^0.1.8",
 		"@cloudflare/kumo": "^1.13.0",
 		"@every-app/sdk": "link:../private-every-app/packages/sdk",
-		"@modelcontextprotocol/sdk": "1.26.0",
 		"@phosphor-icons/react": "^2.1.10",
 		"@tanstack/react-query": "^5.99.0",
 		"@tiptap/extension-color": "3.20.2",
