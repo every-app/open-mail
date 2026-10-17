@@ -17,7 +17,7 @@ import { EnvelopeIcon, PlusIcon, TrashIcon, WarningIcon } from "@phosphor-icons/
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
-import api from "~/services/api";
+import api, { meQuery } from "~/services/api";
 import {
 	useCreateMailbox,
 	useDeleteMailbox,
@@ -43,6 +43,13 @@ export default function HomeRoute() {
 
 	const domains = configData?.domains ?? [];
 	const emailAddresses = configData?.emailAddresses ?? [];
+
+	// Every App: the signed-in person and their role in the organization
+	// (GET /api/v1/me). Owners and admins create and delete mailboxes;
+	// members use them. The Worker enforces this (workers/everyapp/identity.ts);
+	// the page only hides what it would refuse.
+	const { data: me } = useQuery(meQuery);
+	const isAdmin = me?.role === "owner" || me?.role === "admin";
 
 	const [isCreateOpen, setIsCreateOpen] = useState(false);
 	const [newPrefix, setNewPrefix] = useState("");
@@ -130,6 +137,7 @@ export default function HomeRoute() {
 	};
 
 	const isConfigured = emailAddresses.length > 0;
+	const canManage = isAdmin && !isConfigured;
 	const accounts = isConfigured
 		? emailAddresses.map((addr) => ({
 				id: addr,
@@ -146,7 +154,7 @@ export default function HomeRoute() {
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
-						{!isConfigured && (
+						{canManage && (
 							<Button
 								variant="primary"
 								icon={<PlusIcon size={16} />}
@@ -159,6 +167,19 @@ export default function HomeRoute() {
 					{domains.length > 0 && (
 						<p className="text-sm text-kumo-subtle mt-1">
 							{domains.join(", ")}
+						</p>
+					)}
+					{me && (
+						<p className="text-xs text-kumo-subtle mt-2">
+							Signed in as {me.email} ({me.role})
+							{me.gatewayUrl && (
+								<>
+									{" · "}
+									<a href={me.gatewayUrl} className="underline hover:text-kumo-default">
+										Sign out on Every App
+									</a>
+								</>
+							)}
 						</p>
 					)}
 				</div>
@@ -190,7 +211,7 @@ export default function HomeRoute() {
 										{account.email}
 									</div>
 								</div>
-								{!isConfigured && (
+								{canManage && (
 									<Button
 										variant="ghost"
 										size="sm"
@@ -227,9 +248,11 @@ export default function HomeRoute() {
 							<p className="text-sm text-kumo-subtle max-w-sm mb-5">
 								{isConfigured
 									? "Your email routing is configured but no mailboxes have been created yet. They will appear here automatically."
-									: "Create a mailbox to start sending and receiving emails with your domain."}
+									: isAdmin
+										? "Create a mailbox to start sending and receiving emails with your domain."
+										: "Ask an owner or admin of your organization to create a mailbox."}
 							</p>
-							{!isConfigured && (
+							{canManage && (
 								<Button
 									variant="primary"
 									icon={<PlusIcon size={16} />}

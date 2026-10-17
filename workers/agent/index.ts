@@ -32,6 +32,8 @@ import {
 } from "../lib/tools";
 import { Folders, FOLDER_TOOL_DESCRIPTION, MOVE_FOLDER_TOOL_DESCRIPTION } from "../../shared/folders";
 import type { Env } from "../types";
+import type { Connection, ConnectionContext } from "agents";
+import { closeAgentSocket, scheduleSocketClose } from "../everyapp/identity";
 
 // AI SDK v6 changed tool() overloads significantly. We define tools as plain
 // objects matching the Tool type to avoid overload resolution issues.
@@ -563,5 +565,17 @@ Based on the email content and thread context above, draft a reply using draft_r
 			console.error("Auto-draft failed:", (e as Error).message);
 			return { status: "error", error: (e as Error).message };
 		}
+	}
+
+	// Every App: each chat socket closes 15 minutes after it connects and the
+	// client reconnects through the gateway, which signs a fresh identity or
+	// refuses someone it no longer lets in (workers/everyapp/identity.ts).
+	async onConnect(connection: Connection, ctx: ConnectionContext) {
+		await super.onConnect(connection, ctx);
+		await scheduleSocketClose(this, connection.id);
+	}
+
+	closeExpiredSocket(connectionId: string) {
+		closeAgentSocket(this.getConnection(connectionId));
 	}
 }
