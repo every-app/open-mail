@@ -41,6 +41,10 @@ export default defineConfig({
         test: {
           name: "workers",
           include: WORKERS_TESTS,
+          // Each test wakes real SQLite Durable Objects in workerd (inbound
+          // mail wakes EmailAgent too): a few seconds a test on a busy
+          // machine, past Vitest's 5 s default.
+          testTimeout: 30_000,
           poolOptions: {
             workers: {
               // The production entry: its exports are the Durable Object
