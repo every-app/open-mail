@@ -87,16 +87,27 @@ curl "${R[@]}" "$U/api/v1/mailboxes/$REFUSED/emails?folder=sent&limit=100" > "$T
 curl "${R[@]}" "${O[@]}" -X DELETE -o /dev/null "$U/api/v1/mailboxes/$REFUSED"
 
 echo "######## receiving: test/fixtures/inbound.eml through email() on the Vite port"
+[ -n "$DEV_LOG" ] && LOG_START=$(wc -l < "$DEV_LOG")
 bash "$HERE/dev-inbound.sh" "$APP_PORT" "$GW_PORT" "$MAILBOX" | tee "$TMP/inbound.out"
 grep -q '^ok   the Inbox of' "$TMP/inbound.out" && pass "inbound mail filed in the Inbox" || fail "inbound mail (above)"
-if [ -n "$DEV_LOG" ]; then
+EMAIL_ID=$(sed -n 's/^ok   the Inbox of .* lists it (email \(.*\))$/\1/p' "$TMP/inbound.out")
+if [ -n "$DEV_LOG" ] && [ -n "$EMAIL_ID" ]; then
 	# The auto-draft runs in the background after delivery; give it up to 60 s.
+	# Without AI keys the agent logs "Skipping auto-draft for <id>: …"; with
+	# keys, Drafts gets a reply to <id> (listed below).
+	line=""
 	for _ in $(seq 1 60); do
-		line=$(grep -a -E "Skipping auto-draft|onNewEmail|draft_reply|Auto-draft" "$DEV_LOG" | tail -1)
+		line=$(tail -n +"$((LOG_START + 1))" "$DEV_LOG" | grep -a -E "auto-draft.*$EMAIL_ID|$EMAIL_ID.*(draft|Draft)|onNewEmail handler failed" | tail -1)
 		[ -n "$line" ] && break
+		drafted=$(curl "${R[@]}" "$U/api/v1/mailboxes/$MAILBOX/emails?folder=draft&limit=100" | grep -c "$EMAIL_ID")
+		[ "$drafted" -gt 0 ] && line="Drafts holds a reply to $EMAIL_ID" && break
 		sleep 1
 	done
-	[ -n "$line" ] && pass "dev log (auto-draft): $(echo "$line" | head -c 260)" || fail "no auto-draft line in $DEV_LOG"
+	case "$line" in
+		*"onNewEmail handler failed"*) fail "dev log (auto-draft): $(echo "$line" | head -c 260)" ;;
+		"") fail "no auto-draft outcome for $EMAIL_ID in $DEV_LOG within 60 s" ;;
+		*) pass "auto-draft for $EMAIL_ID: $(echo "$line" | head -c 260)" ;;
+	esac
 fi
 curl "${R[@]}" "$U/api/v1/mailboxes/$MAILBOX/emails?folder=draft&limit=100" > "$TMP/drafts.json"
 echo "     Drafts of $MAILBOX: $(json "$TMP/drafts.json" '(Array.isArray(j) ? j : j.emails).map((e) => e.subject).join(" | ") || "(none)"')"

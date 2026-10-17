@@ -108,7 +108,7 @@ The plan's §5.3 checklist, run end to end on 2026-10-17 by the integration lane
       Tests  144 passed (144)
 ```
 
-**2. The dev loop.** `pnpm everyapp dev --port 8808 > dev.log 2>&1` (it printed the app's internal Vite port, 55249, and an `Email:` line for `email.inbound`), then `bash scripts/verify-local.sh 8808 55249 dev.log`:
+**2. The dev loop.** `pnpm everyapp dev --port 8808 > dev.log 2>&1` (it printed the app's internal Vite port, 56602, and an `Email:` line for `email.inbound`), then `bash scripts/verify-local.sh 8808 56602 dev.log`:
 
 ```
 ######## scripts/dev-probe.sh
@@ -125,20 +125,20 @@ ok   GET /favicon.svg -> 200 image/svg+xml
 ok   config -> {"domains":["example.com"],"emailAddresses":[],"ready":false}
 == Set-Cookie: the app sets none
 ok   GET / sets no cookie
-== POST /api/v1/mailboxes (probe-1792247057@example.com, with Origin)
-ok   create mailbox -> 201 {"id":"probe-1792247057@example.com","email":"probe-1792247057@example.com","name":"Probe","settings":{"fromName":"Probe
+== POST /api/v1/mailboxes (probe-1792248156@example.com, with Origin)
+ok   create mailbox -> 201 {"id":"probe-1792248156@example.com","email":"probe-1792248156@example.com","name":"Probe","settings":{"fromName":"Probe
 ok   six folders: archive,draft,inbox,sent,spam,trash
 ok   GET /api/v1/mailboxes lists it
 == POST without Origin (cookieless, no same-origin signal) is anonymous
 ok   POST without Origin -> 401
-== WebSocket /agents/email-agent/probe-1792247057@example.com
+== WebSocket /agents/email-agent/probe-1792248156@example.com
 ok   email-agent socket: upgrade 101, "type":"cf_agent_identity"
-== WebSocket /agents/mailbox/probe-1792247057@example.com (must be refused)
+== WebSocket /agents/mailbox/probe-1792248156@example.com (must be refused)
 ok   mailbox socket refused: refused (no upgrade)
-== HTTP /agents/mailbox/probe-1792247057@example.com and /agents/email-mcp/x (must be refused)
+== HTTP /agents/mailbox/probe-1792248156@example.com and /agents/email-mcp/x (must be refused)
 ok   GET /agents/mailbox/... -> 404
 ok   GET /agents/email-mcp/x -> 400 (no such binding)
-== direct hit on the app's Vite port 55249 (bypassing the gateway)
+== direct hit on the app's Vite port 56602 (bypassing the gateway)
 ok   direct hit -> 401 {"error":"unauthenticated","message":"request reached the app without an identity token (not proxied through the gateway?)"}
 
 dev-probe OK
@@ -147,23 +147,23 @@ ok   dev-probe.sh
 ok   GET /api/v1/me -> {"id":"dev-user","email":"dev@everyapp.localhost","orgId":"dev-org","role":"owner","gatewayUrl":"https://gateway.dev.localhost"}
 ok   GET /api/v1/config -> {"domains":["example.com"],"emailAddresses":[],"ready":false}
 ######## mailboxes: the owner creates dev@example.com, a member may not
-ok   owner POST /api/v1/mailboxes dev@example.com -> 201
+ok   owner POST /api/v1/mailboxes dev@example.com -> 409
 ok   GET /api/v1/mailboxes lists dev@example.com
 ok   member (minted dev identity, app port) POST /api/v1/mailboxes -> {"error":"forbidden","code":"admin_required","message":"Only owners and admins of the organization can manage mailboxes."} 403
 ok   member GET .../dev@example.com/folders -> 200
      (another organization's owner, unpinned dev copy: GET /api/v1/mailboxes -> 200; a deployed copy is pinned to EVERY_APP_ORG_ID and answers 401)
 ######## sending: through the gateway email adapter (the SDK prints it under everyapp dev)
-ok   POST .../dev@example.com/emails -> 200 {"id":"2665f441-9327-48ce-a93c-aa39e1b9eac1","status":"sent"}
-ok   Sent lists "verify-local send 1792247054"
-ok   dev log: [everyapp dev] email to 1 recipient subject "verify-local send 1792247054" (not sent: set EMAIL_REST_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and EMAIL_FROM in .dev.vars to send)
-ok   a sender outside capabilities.email.senders -> 502 {"error":"email_sender_not_allowed","message":"This app may not send as refused-1792247054@other.example: list it, or *@other.example, in capabilities.email.senders in everyapp.config.ts."}
+ok   POST .../dev@example.com/emails -> 200 {"id":"24ebeeb3-62fb-4114-b4f4-50792dddcc0f","status":"sent"}
+ok   Sent lists "verify-local send 1792248153"
+ok   dev log: [everyapp dev] email to 1 recipient subject "verify-local send 1792248153" (not sent: set EMAIL_REST_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and EMAIL_FROM in .dev.vars to send)
+ok   a sender outside capabilities.email.senders -> 502 {"error":"email_sender_not_allowed","message":"This app may not send as refused-1792248153@other.example: list it, or *@other.example, in capabilities.email.senders in everyapp.config.ts."}
 ok   no Sent copy of the refused mail
 ######## receiving: test/fixtures/inbound.eml through email() on the Vite port
 ok   mailbox dev@example.com exists
-ok   delivered inbound-1792247058-6467@example.org from alice@example.org to dev@example.com -> 200 Worker successfully processed email
-ok   the Inbox of dev@example.com lists it (email 3cf955d9-6d31-459f-8b0d-d411efde4d8e)
+ok   delivered inbound-1792248164-18076@example.org from alice@example.org to dev@example.com -> 200 Worker successfully processed email
+ok   the Inbox of dev@example.com lists it (email 40e48364-e021-4869-a99c-7180b144f3ed)
 ok   inbound mail filed in the Inbox
-ok   dev log (auto-draft): Skipping auto-draft for 3cf955d9-6d31-459f-8b0d-d411efde4d8e: AI isn't set up on this gateway (WORKERS_AI_API_TOKEN) or in .dev.vars (WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID).
+ok   auto-draft for 40e48364-e021-4869-a99c-7180b144f3ed: Skipping auto-draft for 40e48364-e021-4869-a99c-7180b144f3ed: AI isn't set up on this gateway (WORKERS_AI_API_TOKEN) or in .dev.vars (WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID).
      Drafts of dev@example.com: (none)
 ######## the agent: socket, one chat turn, the refused objects
 ok   ws /agents/email-agent/dev@example.com -> upgrade 101 + cf_agent_identity
