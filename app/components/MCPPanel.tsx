@@ -46,18 +46,29 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
-const TOOLS = [
-	{ name: "list_mailboxes", desc: "List all mailboxes" },
+/**
+ * The tools MCP clients see: a static copy of the names in the app's tool
+ * catalog (workers/everyapp/tools.ts), less `delete_email`, which the gateway
+ * hides from AI clients until it has approvals. test/tools.test.ts keeps this
+ * list in step with the catalog.
+ */
+export const MCP_TOOLS = [
+	{ name: "list_mailboxes", desc: "List the organization's mailboxes" },
 	{ name: "list_emails", desc: "List emails in a folder" },
 	{ name: "get_email", desc: "Read a full email with body" },
 	{ name: "get_thread", desc: "Load a conversation thread" },
 	{ name: "search_emails", desc: "Search emails by query" },
 	{ name: "draft_reply", desc: "Draft a reply to an email" },
+	{ name: "create_draft", desc: "Create a new draft" },
+	{ name: "update_draft", desc: "Edit a draft" },
 	{ name: "send_reply", desc: "Send a reply" },
 	{ name: "send_email", desc: "Send a new email" },
 	{ name: "mark_email_read", desc: "Mark email as read/unread" },
 	{ name: "move_email", desc: "Move email to a folder" },
-];
+] as const;
+
+/** The app's id: the gateway's connector prefixes each tool name with it. */
+const APP_ID = "agentic-inbox";
 
 function UrlField({ label, url }: { label: string; url: string }) {
 	return (
@@ -164,7 +175,7 @@ export default function MCPPanel() {
 						Available Tools
 					</h4>
 					<div className="border border-kumo-line rounded-lg divide-y divide-kumo-line">
-						{TOOLS.map((tool) => (
+						{MCP_TOOLS.map((tool) => (
 							<div
 								key={tool.name}
 								className="flex items-center gap-2.5 px-3 py-2"
@@ -185,6 +196,13 @@ export default function MCPPanel() {
 							</div>
 						))}
 					</div>
+					<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+						Drafting tools only save drafts; the send tools send at
+						once, as you. On the Every App connector the names start
+						with <code className="font-mono">{APP_ID}_</code>.
+						Deleting email isn't offered to AI clients until the
+						gateway supports approvals.
+					</p>
 				</div>
 			</div>
 		</div>

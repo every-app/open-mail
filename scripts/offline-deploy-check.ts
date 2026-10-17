@@ -127,8 +127,8 @@ try {
 	check(config.name === WORKER, `worker name is ${WORKER}`, config.name);
 	check(
 		JSON.stringify(exportsSeen) === JSON.stringify([...manifest.durableObjects].sort()) &&
-			["MailboxDO", "EmailAgent"].every((c) => manifest.durableObjects.includes(c)) &&
-			exportsSeen.every((c) => ["MailboxDO", "EmailAgent", "EmailMCP"].includes(c)),
+			// TODO(integration): lane L6 deleted EmailMCP; the exports are exactly these two.
+			JSON.stringify(exportsSeen) === JSON.stringify(["EmailAgent", "MailboxDO"]),
 		`exports are the manifest's Durable Objects (${manifest.durableObjects.join(", ")})`,
 		exportsSeen,
 	);

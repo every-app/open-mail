@@ -4,7 +4,9 @@
 // The Durable Object namespaces: the SDK's everyAppWorker() names a class's
 // Worker by string, so cf infers `DurableObjectNamespace<undefined>` and
 // every RPC call on a stub (`getFolders`, `createEmail`, …) is a type error.
-// Remove these three once the SDK emits typed namespaces (platform PR 2).
+// Remove these two once the SDK emits typed namespaces (platform PR 2).
+// TODO(integration): lane L6 removed EMAIL_MCP here with the EmailMCP class
+// (workers/mcp/ is deleted; the MCP tools are workers/everyapp/tools.ts).
 //
 // The rest are set only on a deployed Worker (`everyapp deploy` writes them)
 // or only in `.dev.vars`, so the dev-mode generated Env doesn't carry them.
@@ -12,7 +14,6 @@ declare namespace Cloudflare {
 	interface Env {
 		MAILBOX: DurableObjectNamespace<import("./durableObject").MailboxDO>;
 		EMAIL_AGENT: DurableObjectNamespace<import("./agent").EmailAgent>;
-		EMAIL_MCP: DurableObjectNamespace<import("./mcp").EmailMCP>;
 		EMAIL_ADDRESSES: string[];
 		/** The organization this copy of the app belongs to (org-owned deploys). */
 		EVERY_APP_ORG_ID?: string;

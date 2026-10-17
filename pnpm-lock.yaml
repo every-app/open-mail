@@ -47,9 +47,6 @@ importers:
       '@every-app/sdk':
         specifier: link:../private-every-app/packages/sdk
         version: link:../private-every-app/packages/sdk
-      '@modelcontextprotocol/sdk':
-        specifier: 1.26.0
-        version: 1.26.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
