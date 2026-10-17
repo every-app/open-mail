@@ -16,7 +16,7 @@
     "cloudflare.config.ts",
     "everyapp.config.ts",
     "vite.config.ts",
-    // TODO(integration): lane L5 adds vitest.config.ts (its file) so tsc checks it too.
+    // vitest.config.ts too, so tsc checks the test projects' configuration.
     "vitest.config.ts",
     "react-router.config.ts"
   ],
@@ -30,7 +30,8 @@
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["vite/client", "node"],
     "target": "ES2022",
-    "module": "ES2022",
+    // ESNext for the `with { type: "cf-worker" }` import in cloudflare.config.ts.
+    "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "baseUrl": ".",

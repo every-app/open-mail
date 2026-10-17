@@ -85,7 +85,7 @@ export default {
 			const refused = requireOrganization(env, user);
 			if (refused) return refused;
 			users.set(request, user);
-			return app.fetch(request, withGateway(env, request), ctx as ExecutionContext);
+			return app.fetch(request, withGateway(env, request), ctx);
 		},
 		{ tools },
 	),
@@ -95,9 +95,9 @@ export default {
 		ctx: ExecutionContext,
 	) {
 		try {
-			// TODO(integration): lane L2 (inbound): withNamedAgents() lets the
-			// auto-draft reach a mailbox's agent before its chat panel was ever
-			// opened (workers/everyapp/inbound.ts).
+			// withNamedAgents() lets the auto-draft reach a mailbox's agent
+			// before its chat panel was ever opened (workers/everyapp/inbound.ts);
+			// receiveEmail() itself is upstream's, byte-identical.
 			await receiveEmail(event, withNamedAgents(env), ctx);
 		} catch (e) {
 			console.error("Failed to process incoming email:", (e as Error).message, (e as Error).stack);

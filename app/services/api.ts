@@ -181,8 +181,12 @@ export interface Me {
 	email: string;
 	orgId: string;
 	role: "owner" | "admin" | "member";
-	/** The gateway's origin (sign-out, personal access tokens, its `/mcp`). */
-	gatewayUrl: string;
+	/**
+	 * The gateway's origin (sign-out, personal access tokens, its `/mcp`);
+	 * null only if the Worker knows no gateway URL (never under `everyapp
+	 * dev` or a deploy, which both set the identity issuer).
+	 */
+	gatewayUrl: string | null;
 }
 
 // ---------- API client ----------

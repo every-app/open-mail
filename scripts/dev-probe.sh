@@ -37,8 +37,8 @@ code=$(curl "${R[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$U/favicon
 [ "${code%% *}" = 200 ] && pass "GET /favicon.svg -> $code" || fail "GET /favicon.svg -> $code"
 
 echo "== GET /api/v1/config"
-# TODO(integration): lane L2 added `ready` (the gateway's email status; false
-# until the email capability is on the gateway and in .dev.vars).
+# `ready` is the gateway's email status: under `everyapp dev`, true only with
+# EMAIL_FROM in .dev.vars.
 body=$(curl "${R[@]}" "$U/api/v1/config")
 case "$body" in
 	'{"domains":["example.com"],"emailAddresses":[],"ready":'*'}') pass "config -> $body" ;;
@@ -77,8 +77,9 @@ rc=$?
 echo "== HTTP /agents/mailbox/$MAILBOX and /agents/email-mcp/x (must be refused)"
 code=$(curl "${R[@]}" -o /dev/null -w '%{http_code}' "$U/agents/mailbox/$MAILBOX")
 [ "$code" = 404 ] && pass "GET /agents/mailbox/... -> 404" || fail "GET /agents/mailbox/... -> $code"
-# TODO(integration): lane L6 deleted EmailMCP and its EMAIL_MCP binding, so
-# partyserver answers 400 ("Invalid request") for this path before any guard.
+# EmailMCP is gone (the MCP tools are a defineTools() catalog), so no
+# EMAIL_MCP binding exists and partyserver answers 400 ("Invalid request")
+# for this path before any guard runs.
 code=$(curl "${R[@]}" -o /dev/null -w '%{http_code}' "$U/agents/email-mcp/x")
 [ "$code" = 400 ] && pass "GET /agents/email-mcp/x -> 400 (no such binding)" || fail "GET /agents/email-mcp/x -> $code"
 

@@ -46,6 +46,17 @@ export default {
       senders: ["*@example.com"],
     },
   },
+  // Inbound mail reaches the Worker's email() handler through Email Routing
+  // rules `everyapp deploy` creates from this list (and deletes when an
+  // address leaves it): "*@<domain>" is the zone's catch-all, which exists
+  // only on a zone's apex; any other address ("support@mail.example.com")
+  // gets a rule of its own. List the domains of `senders` here too: mailboxes
+  // are created only on those, and mail to an address without a mailbox is
+  // dropped. The deploy asks before it turns Email Routing on for a domain
+  // (unattended: --enable-email-routing). Edit it, then redeploy.
+  email: {
+    inbound: ["*@example.com"],
+  },
   // No `mcp` setting: the gateway serves `/mcp` from the app's defineTools()
   // catalog (workers/everyapp/tools.ts).
   // Every member of the organization may open the inbox; owners and admins
