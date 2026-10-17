@@ -1,3 +1,17 @@
-# Cloudflare Access (required in production). TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
-POLICY_AUD=your-access-policy-audience-tag
-TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+# Local development only (`pnpm everyapp dev`). Copy to .dev.vars; never commit it.
+# Deployed, the app has no secrets: the gateway holds every key.
+#
+# AI: the app calls models through the gateway's AI proxy. With no gateway in
+# development, one provider key here is used directly (billed to you).
+#
+# Workers AI (the default, AI_PROVIDER=workers-ai): an API token with
+# "Workers AI Read" and its account id.
+# WORKERS_AI_API_TOKEN=
+# CLOUDFLARE_ACCOUNT_ID=
+#
+# Or OpenRouter: run with AI_PROVIDER=openrouter in the environment.
+# OPENROUTER_API_KEY=
+#
+# Email: sends are logged unless these are set (Email Sending REST API).
+# EMAIL_REST_API_TOKEN=
+# EMAIL_FROM=

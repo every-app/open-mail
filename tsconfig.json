@@ -1,17 +1,44 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.cloudflare.json" }
+  // One program for the Worker, the React app and the config files:
+  // .cloudflare/types/index.d.ts (`cf workers types`: the runtime types and
+  // the Env inferred from cloudflare.config.ts) imports cloudflare.config.ts,
+  // so the config files are part of the Worker's program either way.
+  "include": [
+    ".react-router/types/**/*",
+    "app/**/*",
+    "app/**/.server/**/*",
+    "app/**/.client/**/*",
+    "workers/**/*",
+    "shared/**/*",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    ".cloudflare/types/index.d.ts",
+    "cloudflare.config.ts",
+    "everyapp.config.ts",
+    "vite.config.ts",
+    "react-router.config.ts"
   ],
   "compilerOptions": {
-    "checkJs": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
-    "types": [
-        "./worker-configuration.d.ts"
-    ]
+    "skipLibCheck": true,
+    "checkJs": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": ["vite/client", "node"],
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "rootDirs": [".", "./.react-router/types"],
+    "paths": {
+      "~/*": ["./app/*"]
+    },
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   }
 }

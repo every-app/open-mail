@@ -8,6 +8,7 @@ build/
 .env.*
 !.env.example
 .dev.vars
+.dev.vars.*
 !.dev.vars.example
 .vite/
 dist/
@@ -16,4 +17,6 @@ snapshot-*.txt
 opencode.jsonc
 skills-lock.json
 .DS_Store
-worker-configuration.d.ts
+# Every App / cf: generated types, local state, Build Output, deploy inputs.
+.cloudflare/
+.everyapp/
