@@ -8,9 +8,9 @@ import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { withGateway } from "./everyapp/gateway";
 import { agentGuard, requireOrganization, users } from "./everyapp/identity";
-import { withNamedAgents } from "./everyapp/inbound";
 import { app as apiApp, receiveEmail } from "./index";
 import { EmailMCP } from "./mcp";
+import { withNamedAgents } from "./everyapp/inbound";
 import type { Env } from "./types";
 
 export { MailboxDO } from "./durableObject";
