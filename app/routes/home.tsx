@@ -17,22 +17,13 @@ import { EnvelopeIcon, PlusIcon, TrashIcon, WarningIcon } from "@phosphor-icons/
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
-import api from "~/services/api";
+import api, { meQuery } from "~/services/api";
 import {
 	useCreateMailbox,
 	useDeleteMailbox,
 	useMailboxes,
 } from "~/queries/mailboxes";
 import { queryKeys } from "~/queries/keys";
-
-/** GET /api/v1/me (workers/everyapp/identity.ts). */
-type Me = {
-	id: string;
-	email: string;
-	orgId: string;
-	role: "owner" | "admin" | "member";
-	gatewayUrl: string | null;
-};
 
 export function meta() {
 	return [{ title: "Agentic Inbox" }];
@@ -57,18 +48,7 @@ export default function HomeRoute() {
 	// (GET /api/v1/me). Owners and admins create and delete mailboxes;
 	// members use them. The Worker enforces this (workers/everyapp/identity.ts);
 	// the page only hides what it would refuse.
-	// TODO(integration): lane L4 adds `meQuery` (same key and body) to
-	// ~/services/api; use it here once both lanes are merged, so a 401 on
-	// this request reloads into the gateway's sign-in like the others.
-	const { data: me } = useQuery({
-		queryKey: ["me"],
-		queryFn: async (): Promise<Me> => {
-			const res = await fetch("/api/v1/me");
-			if (!res.ok) throw new Error(`Failed to load your account: ${res.status}`);
-			return res.json();
-		},
-		staleTime: 5 * 60_000,
-	});
+	const { data: me } = useQuery(meQuery);
 	const isAdmin = me?.role === "owner" || me?.role === "admin";
 
 	const [isCreateOpen, setIsCreateOpen] = useState(false);
