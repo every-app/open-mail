@@ -16,6 +16,8 @@
     "cloudflare.config.ts",
     "everyapp.config.ts",
     "vite.config.ts",
+    // TODO(integration): lane L5 adds vitest.config.ts (its file) so tsc checks it too.
+    "vitest.config.ts",
     "react-router.config.ts"
   ],
   "compilerOptions": {

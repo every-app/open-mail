@@ -7,11 +7,12 @@
 	"scripts": {
 		"dev": "everyapp dev",
 		"dev:vite": "cf dev",
-		"build": "vite build --mode development && tsc --noEmit",
+		"build": "vite build --mode development && react-router typegen --mode development && tsc --noEmit",
 		"deploy": "everyapp deploy",
 		"types:check": "cf workers types && react-router typegen --mode development && tsc --noEmit",
 		"test": "vitest run",
-		"check:deploy": "tsx scripts/offline-deploy-check.ts"
+		"check:deploy": "tsx scripts/offline-deploy-check.ts",
+		"check:runbook": "tsx scripts/check-runbook-secrets.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai-compatible": "~2.0.85",
@@ -48,6 +49,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "2.0.0-beta.sha-91c870c02",
+		"@cloudflare/vitest-pool-workers": "0.12.21",
 		"@cloudflare/workers-types": "^4.20251128.0",
 		"@react-router/dev": "7.13.1",
 		"@tailwindcss/vite": "^4.1.4",

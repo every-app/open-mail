@@ -12,28 +12,20 @@ An **AI-powered Email Agent** can read your inbox, search conversations, and dra
 
 Read the blog post to learn more about Cloudflare Email Service and how to use it with the Agents SDK, MCP, and from the Wrangler CLI: [Email for Agents](https://blog.cloudflare.com/email-for-agents/).
 
-## How to setup
+## Deploy on Every App
 
-**Important**: Clicking the 'Deploy to Cloudflare' button is only one part of the setup. You must follow the **After deploying** steps as well. For a full step-by-step guide with screenshots, refer to this comment: 
-https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
+This fork runs as a private app behind an [Every App](https://github.com/every-app/private-every-app) gateway, not with the Deploy to Cloudflare button. The gateway signs people in (the organization is the boundary: owners and admins manage mailboxes, members use them). It brokers Workers AI and outgoing mail, and serves the MCP tools. The app's Worker holds no secrets. **[docs/EVERY_APP.md](docs/EVERY_APP.md)** is the full runbook: what changes from upstream, how it works, running it locally, the deploy steps in order, and what isn't done yet.
 
-### To set up
+In short, with a gateway installed (`pnpm everyapp setup` in the Every App checkout) on Workers Paid:
 
-1. Deploy to Cloudflare. The deploy flow will automatically provision R2, Durable Objects, and Workers AI. You'll be prompted for **DOMAINS**, which is the domain (yourdomain.com) you want to receive emails for (email@yourdomain.com).
+1. **Workers AI**: from the Every App checkout, `pnpm everyapp secret set WORKERS_AI_API_TOKEN --for gateway` (an API token with Workers AI Read).
+2. **Your mail domain**: onboard it to Email Sending and enable Email Routing on its zone.
+3. **Declare the sending domains** in `everyapp.config.ts` (`capabilities.email.senders: ["*@example.com"]`).
+4. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It prints the Worker's name, `every-<orgKey>-agentic-inbox`.
+5. **Route inbound mail**: an Email Routing catch-all rule, "Send to a Worker", naming that Worker.
+6. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
 
-     [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/agentic-inbox)
-
-2. **Configure Cloudflare Access** -- Enable [one-click Cloudflare Access](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/) on your Worker under Settings > Domains & Routes. The modal will show your `POLICY_AUD` and `TEAM_DOMAIN` values. `TEAM_DOMAIN` can be either your Access team URL or the full `.../cdn-cgi/access/certs` URL. **You must set these as secrets for your Worker.**
-3. **Set up Email Routing** -- In the Cloudflare dashboard, go to your domain > Email Routing and create a catch-all rule that forwards to this Worker
-4. **Enable Email Service** -- The worker needs the `send_email` binding to send outbound emails. See [Email Service docs](https://developers.cloudflare.com/email-routing/email-workers/send-email-workers/)
-5. **Create a mailbox** -- Visit your deployed app and create a mailbox for any address on your domain (e.g. `hello@example.com`)
-
-### Troubleshooting Access
-
-1. If you see `Invalid or expired Access token`, that usually means `POLICY_AUD` or `TEAM_DOMAIN` secrets are incorrect.
-   * Resolution: [turn Access off and back on for the Worker to get the Access modal again](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then reset your Worker secrets to the latest `POLICY_AUD` and `TEAM_DOMAIN` values shown there.
-2. If you see `Cloudflare Access must be configured in production`, this application is intentionally enforcing Cloudflare Access so your inbox is not exposed to anyone on the internet.
-   * Resolution: enable Access using [one-click Cloudflare Access for Workers](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/), then set the `POLICY_AUD` and `TEAM_DOMAIN` Worker secrets from the modal values.
+Some of these steps wait on Every App platform changes that haven't merged yet; the runbook marks each one.
 
 ## Features
 
@@ -47,36 +39,28 @@ https://github.com/cloudflare/agentic-inbox/issues/4#issuecomment-4269118513
 
 - **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
 - **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
-- **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI (`@cf/moonshotai/kimi-k2.5`), `react-markdown` + `remark-gfm`
-- **Auth:** Cloudflare Access JWT validation (required outside local development)
+- **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI through the Every App gateway (`@cf/meta/llama-4-scout-17b-16e-instruct` by default), `react-markdown` + `remark-gfm`
+- **Auth:** the Every App gateway's signed identity, checked by `everyApp()` on every request
 
 ## Getting Started
 
-```bash
-npm install
-npm run dev
-```
-
-### Configuration
-
-1. Set your domain in `wrangler.jsonc`
-2. Create an R2 bucket named `agentic-inbox`: `wrangler r2 bucket create agentic-inbox`
-
-### Deploy
+You need Node 22+, pnpm 10, and the Every App repository checked out beside this one as `../private-every-app`. The Every App SDK and CLI are linked from it.
 
 ```bash
-npm run deploy
+(cd ../private-every-app && pnpm install && pnpm -C packages/sdk build)
+pnpm install
+pnpm everyapp dev        # http://agentic-inbox.localhost:8787, signed in as a seeded owner
 ```
+
+`pnpm test`, `pnpm types:check`, `pnpm build` and `pnpm check:deploy` (the deploy's own checks, offline) are described in [docs/EVERY_APP.md](docs/EVERY_APP.md#tests-and-checks).
 
 ## Prerequisites
 
-- Cloudflare account with a domain
-- [Email Routing](https://developers.cloudflare.com/email-routing/) enabled for receiving
-- [Email Service](https://developers.cloudflare.com/email-service/) enabled for sending
-- [Workers AI](https://developers.cloudflare.com/workers-ai/) enabled (for the agent)
-- [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) configured for deployed/shared environments (required in production)
+- An [Every App](https://github.com/every-app/private-every-app) gateway on a Cloudflare account with Workers Paid
+- A domain on Cloudflare DNS in the gateway's account, onboarded to [Email Sending](https://developers.cloudflare.com/email-service/) and with [Email Routing](https://developers.cloudflare.com/email-routing/) enabled
+- A Workers AI API token on the gateway (or an OpenRouter key)
 
-Any user who passes the shared Cloudflare Access policy can access all mailboxes in this app by design. This includes the MCP server at `/mcp` -- external AI tools (Claude Code, Cursor, etc.) connected via MCP can operate on any mailbox by passing a `mailboxId` parameter. There is no per-mailbox authorization; the Cloudflare Access policy is the single trust boundary.
+Anyone in the organization that owns the app can use every mailbox, including through the gateway's MCP connector, where AI tools (Claude Code, Cursor, etc.) act on a mailbox by its address. There is no per-mailbox authorization: the gateway's organization is the trust boundary.
 
 ## Architecture
 
