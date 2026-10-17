@@ -18,77 +18,14 @@
  */
 import {
 	ConfigurationError,
+	GatewayRefusalError,
 	integrationStatus,
-	type CapabilityId,
+	sendEmail,
+	type EmailAttachmentInput,
 	type GatewayCallFor,
+	type SendEmailMessage,
+	type SendEmailResult,
 } from "@every-app/sdk/server";
-
-// TODO(integration): lane inbox-L2b, once platform PR 3 (port/email-capability)
-// is in the linked SDK, replace the stand-in below (GatewayEmailMessage,
-// GatewaySendResult, GatewayRefusalError, sendEmail) with the SDK's:
-//   import { sendEmail, type SendEmailRequest } from "@every-app/sdk/server";
-// and drop the `as string as CapabilityId` cast in emailSendingReady().
-
-/** The gateway's send request: PR 3's `SendEmailRequest`, as the plan specifies it. */
-export interface GatewayEmailMessage {
-	to: string | string[];
-	cc?: string | string[];
-	bcc?: string | string[];
-	subject: string;
-	text?: string;
-	html?: string;
-	/** Absent: the gateway's own sender. Present: must match the manifest's `senders`. */
-	from?: { address: string; name?: string };
-	replyTo?: string;
-	headers?: Record<string, string>;
-	attachments?: { filename: string; contentType: string; content: string /* base64 */ }[];
-}
-
-/** PR 3's send result. `logged`: local dev without Email Sending keys. */
-interface GatewaySendResult {
-	messageId?: string;
-	status: "delivered" | "queued" | "logged";
-}
-
-/** The SDK's thrown twin of `gatewayRefusal()` (PR 3), stood in until it ships. */
-class GatewayRefusalError extends Error {
-	constructor(
-		readonly status: number,
-		readonly code: string,
-		message: string,
-	) {
-		super(message);
-		this.name = "GatewayRefusalError";
-	}
-}
-
-/**
- * Stand-in for the SDK's `sendEmail({ env, for, message })` (PR 3), with its
- * signature. Local dev: logs the line the SDK logs when no Email Sending key
- * is in `.dev.vars` and reports a `dev-` id. Deployed: refuses, so a Worker
- * never reports a send that didn't happen.
- */
-async function sendEmail({
-	env,
-	message,
-}: {
-	env: object;
-	for?: GatewayCallFor;
-	message: GatewayEmailMessage;
-}): Promise<GatewaySendResult> {
-	if (!(env as { EVERYAPP_DEV?: unknown }).EVERYAPP_DEV) {
-		throw new GatewayRefusalError(
-			503,
-			"email_not_configured",
-			"Email sending isn't connected to the gateway yet (the gateway's email capability); nothing was sent.",
-		);
-	}
-	const recipients = [message.to, message.cc, message.bcc].flat().filter(Boolean).length;
-	console.log(
-		`[everyapp dev] email to ${recipients} recipients subject ${JSON.stringify(message.subject)} (logged by the app's stand-in until the gateway email capability is in the SDK; not sent)`,
-	);
-	return { status: "logged", messageId: `dev-${crypto.randomUUID()}` };
-}
 
 /** A failed send: the gateway's refusal code and message, or `email_send_failed`. */
 export class EmailSendError extends Error {
@@ -106,7 +43,16 @@ export class EmailSendError extends Error {
 type Address = string | EmailAddress;
 type Recipients = Address | Address[];
 
-/** `env.EMAIL` for this request: the gateway's email capability as a `send_email` binding. */
+/**
+ * `env.EMAIL` for this request: the gateway's email capability as a
+ * `send_email` binding. `target` says whom the mail is for (the request's
+ * person, or the organization's background work); the SDK attributes the
+ * call with it. Deployed, the SDK posts to the gateway over the
+ * EVERY_APP_GATEWAY binding. Under `everyapp dev` it applies the gateway's
+ * checks (the message, the manifest's senders) and prints the mail, or sends
+ * it through Email Sending's REST API with EMAIL_REST_API_TOKEN,
+ * CLOUDFLARE_ACCOUNT_ID and EMAIL_FROM in `.dev.vars`.
+ */
 export function gatewayEmail(env: Cloudflare.Env, target?: GatewayCallFor): SendEmail {
 	return emailAdapter((message) => sendEmail({ env, for: target, message }));
 }
@@ -116,7 +62,7 @@ export function gatewayEmail(env: Cloudflare.Env, target?: GatewayCallFor): Send
  * gateway's request and every failure to an EmailSendError.
  */
 export function emailAdapter(
-	send: (message: GatewayEmailMessage) => Promise<GatewaySendResult>,
+	send: (message: SendEmailMessage) => Promise<SendEmailResult>,
 ): SendEmail {
 	return {
 		async send(message: EmailMessage | EmailMessageBuilder): Promise<EmailSendResult> {
@@ -133,9 +79,10 @@ export function emailAdapter(
 
 /**
  * The Workers `send_email` message (what workers/email-sender.ts builds) as
- * the gateway's send request. Recipients go as bare addresses.
+ * the gateway's send request (the SDK's SendEmailMessage). Recipients go as
+ * bare addresses; `from` and `replyTo` keep their display names.
  */
-export function toGatewayMessage(message: EmailMessage | EmailMessageBuilder): GatewayEmailMessage {
+export function toGatewayMessage(message: EmailMessage | EmailMessageBuilder): SendEmailMessage {
 	if (!("subject" in message)) {
 		// An EmailMessage carries raw MIME; the gateway takes structured mail only.
 		throw new EmailSendError(
@@ -144,7 +91,6 @@ export function toGatewayMessage(message: EmailMessage | EmailMessageBuilder): G
 			"Raw MIME messages can't be sent through the gateway; send a structured message.",
 		);
 	}
-	const from = typeof message.from === "string" ? { email: message.from, name: "" } : message.from;
 	return {
 		to: addresses(message.to) ?? [],
 		...(message.cc ? { cc: addresses(message.cc) } : {}),
@@ -152,21 +98,33 @@ export function toGatewayMessage(message: EmailMessage | EmailMessageBuilder): G
 		subject: message.subject,
 		...(message.text ? { text: message.text } : {}),
 		...(message.html ? { html: message.html } : {}),
-		from: { address: from.email, ...(from.name ? { name: from.name } : {}) },
-		...(message.replyTo ? { replyTo: addressOf(message.replyTo) } : {}),
+		from: named(message.from),
+		...(message.replyTo ? { replyTo: named(message.replyTo) } : {}),
 		...(message.headers && Object.keys(message.headers).length > 0 ? { headers: message.headers } : {}),
-		...(message.attachments?.length
-			? {
-					// The gateway's shape has no disposition/contentId: inline
-					// images go as ordinary attachments (TODO.md, "Decide").
-					attachments: message.attachments.map((a) => ({
-						filename: a.filename,
-						contentType: a.type,
-						content: base64(a.content),
-					})),
-				}
-			: {}),
+		...(message.attachments?.length ? { attachments: message.attachments.map(attachment) } : {}),
 	};
+}
+
+/**
+ * One attachment in the gateway's shape: base64 content, and `inline` with
+ * its `contentId` (an HTML body's `cid:` image). An inline part without a
+ * content id can't be referenced, and the gateway refuses it, so it goes as
+ * an ordinary attachment.
+ */
+function attachment(a: EmailAttachment): EmailAttachmentInput {
+	const contentId = a.contentId?.trim();
+	return {
+		filename: a.filename,
+		contentType: a.type,
+		content: base64(a.content),
+		...(a.disposition === "inline" && contentId ? { disposition: "inline", contentId } : {}),
+	};
+}
+
+/** `{ address, name? }`: the display name only when there is one. */
+function named(address: Address): { address: string; name?: string } {
+	const { email, name } = typeof address === "string" ? { email: address, name: "" } : address;
+	return { address: email, ...(name?.trim() ? { name } : {}) };
 }
 
 function addressOf(address: Address): string {
@@ -194,7 +152,7 @@ function base64(content: string | ArrayBuffer | ArrayBufferView): string {
 
 function toSendError(error: unknown): EmailSendError {
 	if (error instanceof EmailSendError) return error;
-	if (isGatewayRefusal(error)) {
+	if (error instanceof GatewayRefusalError) {
 		return new EmailSendError(error.code, error.status, error.message, { cause: error });
 	}
 	if (error instanceof ConfigurationError) {
@@ -202,15 +160,6 @@ function toSendError(error: unknown): EmailSendError {
 	}
 	const message = error instanceof Error ? error.message : String(error);
 	return new EmailSendError("email_send_failed", 502, message, { cause: error });
-}
-
-/** The gateway's refusal, by shape: the SDK's GatewayRefusalError or the stand-in's. */
-function isGatewayRefusal(error: unknown): error is { status: number; code: string; message: string } {
-	return (
-		error instanceof Error &&
-		typeof (error as { status?: unknown }).status === "number" &&
-		typeof (error as { code?: unknown }).code === "string"
-	);
 }
 
 // -- For the send routes (workers/index.ts, workers/routes/reply-forward.ts)
@@ -241,15 +190,21 @@ let readyCache: { ready: boolean; at: number } | undefined;
 
 /**
  * Whether sends would go through: the gateway's `GET /api/integrations/email`
- * `ready` (the manifest requests `email`, the gateway has a sender, the
- * capability is configured), cached per isolate for 60 s. False while the
- * linked SDK has no `email` capability (it refuses the unknown id).
+ * (through the SDK's integrationStatus()) is `ready` (the manifest requests
+ * `email` and the gateway has a sender and a transport) and accepts at least
+ * one of the manifest's `senders` (a hosted gateway accepts none in v1, and
+ * every mailbox sends as itself, never as the gateway's sender). Cached per
+ * isolate for 60 s. Under `everyapp dev` the SDK answers for the gateway:
+ * ready only when `.dev.vars` sets EMAIL_FROM (with EMAIL_REST_API_TOKEN and
+ * CLOUDFLARE_ACCOUNT_ID too, dev mail really goes out; otherwise it is
+ * printed and nothing is sent).
  */
 export async function emailSendingReady(env: Cloudflare.Env, now = Date.now()): Promise<boolean> {
 	if (readyCache && now - readyCache.at < READY_TTL_MS) return readyCache.ready;
 	try {
-		const status = await integrationStatus({ env, provider: "email" as string as CapabilityId });
-		readyCache = { ready: status.ready === true, at: now };
+		const status = await integrationStatus({ env, provider: "email" });
+		const senders: unknown = status.senders;
+		readyCache = { ready: status.ready === true && Array.isArray(senders) && senders.length > 0, at: now };
 		return readyCache.ready;
 	} catch (error) {
 		if (!(error instanceof ConfigurationError)) {

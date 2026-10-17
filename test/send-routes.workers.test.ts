@@ -2,15 +2,17 @@
 // R2 in workerd: sends are awaited, a refusal answers 502 with the gateway's
 // code and leaves no Sent copy, and the Sent row is written only after the
 // gateway accepted the message.
+import { GatewayRefusalError, type SendEmailMessage, type SendEmailResult } from "@every-app/sdk/server";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import manifest from "../everyapp.config";
 import { Folders } from "../shared/folders";
-import { emailAdapter, type GatewayEmailMessage } from "../workers/everyapp/email";
+import { emailAdapter, resetEmailReadyCache } from "../workers/everyapp/email";
 import { withGateway } from "../workers/everyapp/gateway";
 import { app } from "../workers/index";
 import type { Env } from "../workers/types";
 
-type Send = (message: GatewayEmailMessage) => Promise<{ messageId?: string; status: "delivered" | "queued" | "logged" }>;
+type Send = (message: SendEmailMessage) => Promise<SendEmailResult>;
 
 const ORIGIN = "https://agentic-inbox.example.com";
 let count = 0;
@@ -37,8 +39,8 @@ async function request(testEnv: Env, method: string, path: string, body?: unknow
 	return response;
 }
 
-async function newMailbox(): Promise<string> {
-	const address = `sender-${Date.now()}-${count++}@example.com`;
+async function newMailbox(domain = "example.com"): Promise<string> {
+	const address = `sender-${Date.now()}-${count++}@${domain}`;
 	const created = await request(envWith(accept), "POST", "/api/v1/mailboxes", { email: address, name: "Support" });
 	expect(created.status).toBe(201);
 	return address;
@@ -78,9 +80,10 @@ async function attachmentKeys(): Promise<string[]> {
 
 const accept: Send = async () => ({ messageId: "<gw-1@example.com>", status: "queued" });
 
+/** What the SDK's sendEmail() throws when the gateway refuses. */
 function refuse(code: string, status = 403): Send {
 	return async () => {
-		throw Object.assign(new Error(`The gateway refused the send (${code}).`), { name: "GatewayRefusalError", status, code });
+		throw new GatewayRefusalError({ status, code, message: `The gateway refused the send (${code}).` });
 	};
 }
 
@@ -246,29 +249,107 @@ describe("POST /api/v1/mailboxes/:mailboxId/emails/:id/forward", () => {
 	});
 });
 
-describe("withGateway()'s env.EMAIL until the SDK's sendEmail ships", () => {
-	it("is logged under everyapp dev (200, a Sent copy) and refused when deployed (502 email_not_configured)", async () => {
+type GatewayCall = { url: string; identity: string | null; body: unknown };
+
+/** A fake EVERY_APP_GATEWAY binding: records each request, answers with `reply`. */
+function fakeGateway(reply: () => Response) {
+	const calls: GatewayCall[] = [];
+	return {
+		calls,
+		binding: {
+			async fetch(input: RequestInfo | URL, init?: RequestInit) {
+				const request = new Request(input, init);
+				const text = await request.text();
+				calls.push({ url: request.url, identity: request.headers.get("x-everyapp-identity"), body: text ? JSON.parse(text) : undefined });
+				return reply();
+			},
+		},
+	};
+}
+
+/** withGateway()'s env, as the entry builds it for a request with the person's identity. */
+function gatewayEnv(extra: Record<string, unknown>): Env {
+	const request = new Request(`${ORIGIN}/api/v1/x`, { headers: { "x-everyapp-identity": "token-of-the-person" } });
+	return withGateway({ ...(env as unknown as Cloudflare.Env), ...extra } as Cloudflare.Env, request);
+}
+
+describe("withGateway()'s env.EMAIL: the SDK's sendEmail()", () => {
+	const message = (from: string) => ({ to: "alice@example.org", from, subject: "Hello", text: "t" });
+
+	it("deployed: the gateway accepts, so the route answers 200 and writes the Sent copy", async () => {
 		const address = await newMailbox();
-		const log = vi.spyOn(console, "log").mockImplementation(() => {});
+		const gateway = fakeGateway(() => Response.json({ messageId: "<gw-1@example.com>", status: "delivered" }));
+		const response = await request(gatewayEnv({ EVERY_APP_GATEWAY: gateway.binding }), "POST", `/api/v1/mailboxes/${address}/emails`, message(address));
+		expect(response.status).toBe(200);
+		expect(gateway.calls).toEqual([
+			{
+				url: "http://every-app-gateway.internal/api/integrations/email/send",
+				identity: "token-of-the-person",
+				body: { to: "alice@example.org", subject: "Hello", text: "t", from: { address } },
+			},
+		]);
+		expect(await sentFolder(address)).toHaveLength(1);
+	});
+
+	it("deployed: the gateway refuses the sender, so the route answers 502 with its code and writes no Sent copy", async () => {
+		const address = await newMailbox();
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		const base = env as unknown as Cloudflare.Env;
-		const message = { to: "alice@example.org", from: address, subject: "Hello", text: "t" };
+		const gateway = fakeGateway(() =>
+			Response.json(
+				{ error: "email_sender_not_allowed", code: "email_sender_not_allowed", message: `This app may not send as ${address}.` },
+				{ status: 403, headers: { "x-everyapp-error": "email_sender_not_allowed" } },
+			),
+		);
+		const response = await request(gatewayEnv({ EVERY_APP_GATEWAY: gateway.binding }), "POST", `/api/v1/mailboxes/${address}/emails`, message(address));
+		expect(response.status).toBe(502);
+		expect(await response.json()).toEqual({ error: "email_sender_not_allowed", message: `This app may not send as ${address}.` });
+		expect(await sentFolder(address)).toEqual([]);
+	});
 
-		const dev = await request(withGateway({ ...base, EVERYAPP_DEV: "1" } as Cloudflare.Env), "POST", `/api/v1/mailboxes/${address}/emails`, message);
-		expect(dev.status).toBe(200);
-		expect(log).toHaveBeenCalledWith(expect.stringMatching(/^\[everyapp dev\] email to 1 recipients subject "Hello"/));
+	it("deployed without the gateway binding: 502 email_not_configured, no Sent copy", async () => {
+		const address = await newMailbox();
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const response = await request(gatewayEnv({}), "POST", `/api/v1/mailboxes/${address}/emails`, message(address));
+		expect(response.status).toBe(502);
+		expect(((await response.json()) as { error: string }).error).toBe("email_not_configured");
+		expect(await sentFolder(address)).toEqual([]);
+	});
+
+	it("everyapp dev: a mailbox on a sender domain is printed (200, a Sent copy); one on another domain is refused (502)", async () => {
+		const info = vi.spyOn(console, "info").mockImplementation(() => {});
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		// everyAppWorker() passes the manifest's senders to the dev Worker.
+		const dev = gatewayEnv({ EVERYAPP_DEV: "1", EVERYAPP_EMAIL_SENDERS: JSON.stringify(manifest.capabilities.email.senders) });
+
+		const address = await newMailbox();
+		const sent = await request(dev, "POST", `/api/v1/mailboxes/${address}/emails`, message(address));
+		expect(sent.status).toBe(200);
+		expect(info).toHaveBeenCalledWith(expect.stringMatching(/^\[everyapp dev\] email to 1 recipient subject "Hello"/));
 		expect(await sentFolder(address)).toHaveLength(1);
 
-		const deployed = await request(withGateway(base), "POST", `/api/v1/mailboxes/${address}/emails`, message);
-		expect(deployed.status).toBe(502);
-		expect(((await deployed.json()) as { error: string }).error).toBe("email_not_configured");
-		expect(await sentFolder(address)).toHaveLength(1);
+		const other = await newMailbox("other.example");
+		const refused = await request(dev, "POST", `/api/v1/mailboxes/${other}/emails`, message(other));
+		expect(refused.status).toBe(502);
+		expect(((await refused.json()) as { error: string }).error).toBe("email_sender_not_allowed");
+		expect(await sentFolder(other)).toEqual([]);
 	});
 });
 
 describe("GET /api/v1/config", () => {
-	it("adds ready: false while the gateway's email capability isn't available", async () => {
+	beforeEach(() => resetEmailReadyCache());
+	afterEach(() => resetEmailReadyCache());
+
+	it("lists DOMAINS and says ready: false without a gateway", async () => {
 		const response = await request(envWith(accept), "GET", "/api/v1/config");
 		expect(await response.json()).toEqual({ domains: ["example.com"], emailAddresses: [], ready: false });
+	});
+
+	it("says ready: true when the gateway's email status is ready and accepts the app's senders", async () => {
+		const gateway = fakeGateway(() =>
+			Response.json({ capability: "email", requested: true, configured: true, ready: true, sender: null, senders: ["*@example.com"] }),
+		);
+		const response = await request(gatewayEnv({ EVERY_APP_GATEWAY: gateway.binding }), "GET", "/api/v1/config");
+		expect(await response.json()).toEqual({ domains: ["example.com"], emailAddresses: [], ready: true });
+		expect(gateway.calls.map((c) => c.url)).toEqual(["http://every-app-gateway.internal/api/integrations/email"]);
 	});
 });

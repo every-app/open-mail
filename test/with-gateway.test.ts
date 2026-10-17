@@ -1,5 +1,5 @@
 // withGateway(): the env upstream's code expects, brokered by the gateway.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentModelId, mapModel, withGateway } from "../workers/everyapp/gateway";
 
 type Call = { url: string; body: unknown; identity: string | null };
@@ -21,6 +21,8 @@ function fakeGateway(reply: { status?: number; body: unknown }) {
 		},
 	};
 }
+
+afterEach(() => vi.restoreAllMocks());
 
 function env(extra: Record<string, unknown> = {}) {
 	return { AI_PROVIDER: "workers-ai", AGENT_MODEL: "", ...extra } as unknown as Cloudflare.Env;
@@ -75,13 +77,30 @@ describe("withGateway", () => {
 		);
 	});
 
-	it("EMAIL.send() is a logging stand-in in dev and refuses on a deployed Worker until the gateway capability is wired", async () => {
+	it("EMAIL.send() is the SDK's sendEmail: printed under everyapp dev, refused on a deployed Worker without the gateway", async () => {
 		const message = { from: "dev@example.com", to: "a@example.org", subject: "hi", text: "x" };
-		const dev = withGateway(env({ EVERYAPP_DEV: "1" }));
+		vi.spyOn(console, "info").mockImplementation(() => {});
+		// everyAppWorker() passes the manifest's senders to the dev Worker.
+		const dev = withGateway(env({ EVERYAPP_DEV: "1", EVERYAPP_EMAIL_SENDERS: JSON.stringify(["*@example.com"]) }));
 		const sent = await dev.EMAIL.send(message as never);
 		expect(sent.messageId).toMatch(/^dev-/);
 		const deployed = withGateway(env());
 		await expect(deployed.EMAIL.send(message as never)).rejects.toMatchObject({ code: "email_not_configured" });
+	});
+
+	it("EMAIL.send() posts to the gateway's email capability, attributed to the request", async () => {
+		const gateway = fakeGateway({ body: { messageId: "<gw-1@example.com>", status: "delivered" } });
+		const request = new Request("https://agentic-inbox.example.com/api/v1/x", {
+			headers: { "x-everyapp-identity": "token-of-the-person" },
+		});
+		const { EMAIL } = withGateway(env({ EVERY_APP_GATEWAY: gateway.binding }), request);
+		const sent = await EMAIL.send({ from: "dev@example.com", to: "a@example.org", subject: "hi", text: "x" } as never);
+		expect(sent).toEqual({ messageId: "<gw-1@example.com>" });
+		expect(gateway.calls[0]).toEqual({
+			url: "http://every-app-gateway.internal/api/integrations/email/send",
+			body: { to: "a@example.org", subject: "hi", text: "x", from: { address: "dev@example.com" } },
+			identity: "token-of-the-person",
+		});
 	});
 
 	it("maps model ids and picks the agent model", () => {
