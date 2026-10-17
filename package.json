@@ -7,7 +7,7 @@
 	"scripts": {
 		"dev": "everyapp dev",
 		"dev:vite": "cf dev",
-		"build": "vite build --mode development && tsc --noEmit",
+		"build": "vite build --mode development && react-router typegen --mode development && tsc --noEmit",
 		"deploy": "everyapp deploy",
 		"types:check": "cf workers types && react-router typegen --mode development && tsc --noEmit",
 		"test": "vitest run",
