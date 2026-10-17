@@ -11,7 +11,8 @@
 		"deploy": "everyapp deploy",
 		"types:check": "cf workers types && react-router typegen --mode development && tsc --noEmit",
 		"test": "vitest run",
-		"check:deploy": "tsx scripts/offline-deploy-check.ts"
+		"check:deploy": "tsx scripts/offline-deploy-check.ts",
+		"check:runbook": "tsx scripts/check-runbook-secrets.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai-compatible": "~2.0.85",
