@@ -36,9 +36,15 @@ export default {
   // (workers/everyapp/email.ts): each mailbox sends from its own address,
   // and the gateway refuses a From that no `senders` pattern matches.
   // `senders` names the sending domains, one "*@<domain>" per domain
-  // onboarded to Email Sending in the gateway's Cloudflare account (at most
-  // 20, lowercase). The domains offered for new mailboxes (DOMAINS) are
-  // derived from this list in cloudflare.config.ts. Edit it, then redeploy.
+  // onboarded to the gateway's email provider (Email Sending in the
+  // gateway's Cloudflare account, or verified in Resend): at most 20,
+  // lowercase, no duplicates. The domains offered for new mailboxes
+  // (DOMAINS) are derived from this list in cloudflare.config.ts.
+  // "*@example.com" is a placeholder: replace it together with
+  // email.inbound below. A good mail domain is a zone in the gateway's
+  // Cloudflare account, on Cloudflare DNS, whose MX records nothing else
+  // uses (Email Routing takes them over). `pnpm check:deploy` checks the
+  // pair offline; then redeploy (docs/EVERY_APP.md, "Deploy it" step 9).
   capabilities: {
     email: {
       access: "write",
@@ -50,10 +56,13 @@ export default {
   // rules `everyapp deploy` creates from this list (and deletes when an
   // address leaves it): "*@<domain>" is the zone's catch-all, which exists
   // only on a zone's apex; any other address ("support@mail.example.com")
-  // gets a rule of its own. List the domains of `senders` here too: mailboxes
-  // are created only on those, and mail to an address without a mailbox is
-  // dropped. The deploy asks before it turns Email Routing on for a domain
-  // (unattended: --enable-email-routing). Edit it, then redeploy.
+  // gets a rule of its own. At most 50 addresses, lowercase. List the
+  // domains of `senders` here too: mailboxes are created only on those, and
+  // mail to an address without a mailbox is dropped. The deploy asks before
+  // it turns Email Routing on for a domain (unattended:
+  // --enable-email-routing), and refuses a domain that isn't on a zone in
+  // the gateway's account. "*@example.com" is a placeholder, like the sender
+  // above. Edit it, then redeploy.
   email: {
     inbound: ["*@example.com"],
   },
