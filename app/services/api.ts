@@ -14,7 +14,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
  */
 const REFUSAL_MESSAGES: Record<string, string> = {
 	email_sender_not_allowed:
-		"This mailbox's domain isn't one this app may send from. An owner adds it to capabilities.email.senders in everyapp.config.ts and redeploys.",
+		"This mailbox's domain isn't one this app may send from. An owner adds it with everyapp email set --sender.",
 	email_sender_not_verified:
 		"This mailbox's domain isn't set up for Email Sending on the gateway's Cloudflare account yet. The gateway's operator onboards the domain.",
 	email_budget_exhausted:

@@ -7,8 +7,8 @@
 //   … policy-check.ts build-output <app> <worker name>
 //
 // `manifest` validates everyapp.config.ts as strictly as `everyapp dev` and
-// `everyapp deploy` do. `build-output` runs appPolicyProblems() and
-// prepareAppBuildOutput() on the production Build Output in
+// `everyapp deploy` do. `build-output` installs the production Build Output
+// for the offline target, then runs appPolicyProblems() and prepareAppBuildOutput() in
 // <app>/.cloudflare/output, as `everyapp deploy` does before it uploads.
 // The last line printed is `RESULT <json>`.
 import path from "node:path";
@@ -35,20 +35,20 @@ if (mode === "manifest") {
 	const manifest = (await (loadEveryAppManifest as (cwd: string) => Promise<unknown>)(appDir)) as {
 		id: string;
 		resources?: { durableObjects?: { className: string }[] };
-		capabilities?: { email?: { senders?: string[] } };
-		email?: { inbound?: string[] };
+		email?: { inbound?: boolean };
 	};
 	result({
 		id: manifest.id,
 		durableObjects: (manifest.resources?.durableObjects ?? []).map((d) => d.className),
-		senders: manifest.capabilities?.email?.senders ?? [],
-		inbound: manifest.email?.inbound ?? [],
+		inbound: manifest.email?.inbound,
 	});
 } else {
 	if (!workerName) throw new Error("build-output needs the worker name");
 	const fs = await import("node:fs");
 	const { appPolicyProblems, prepareAppBuildOutput } = await cliModule("lib/app/policy.ts");
-	const inputs = { workerName, resources: {} };
+	const { installAppBuildOutput } = await cliModule("lib/app/installBuildOutput.ts");
+	const inputs = JSON.parse(fs.readFileSync(path.join(appDir, ".everyapp/deploy.json"), "utf8"));
+	await (installAppBuildOutput as (o: unknown) => Promise<void>)({ cwd: appDir, target: inputs });
 	const configPath = path.join(appDir, ".cloudflare/output/v0/workers/default/worker.config.json");
 	const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
 	const problems = (appPolicyProblems as (c: unknown, i: unknown) => string[])(config, inputs);

@@ -12,10 +12,12 @@
 # Or OpenRouter: run with AI_PROVIDER=openrouter in the environment.
 # OPENROUTER_API_KEY=
 #
-# Email: the SDK checks each send against the manifest's senders and prints
+# Email: the SDK checks each send against EVERYAPP_EMAIL_SENDERS and prints
 # it. With all three of EMAIL_REST_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (above)
 # and EMAIL_FROM it sends through the Email Sending REST API instead, on your
-# account. EMAIL_FROM alone makes GET /api/v1/config say ready: true.
+# account. Set EVERYAPP_EMAIL_SENDERS for the mailbox domains, and EMAIL_FROM
+# for GET /api/v1/config to say ready: true.
+# EVERYAPP_EMAIL_SENDERS=["*@example.com"]
 # EMAIL_REST_API_TOKEN=
 # EMAIL_FROM=
 # EMAIL_FROM_NAME=

@@ -1,14 +1,13 @@
 // `pnpm check:deploy`: what `everyapp deploy` checks before it uploads, run
 // offline. Nothing here talks to Cloudflare or a gateway.
 //
-//  1. writes a fake .everyapp/deploy.json (the inputs `everyapp deploy`
-//     writes from the gateway's registry; Worker every-acme-agentic-inbox,
+//  1. writes an offline installation target to .everyapp/deploy.json
+//     (Worker every-acme-agentic-inbox,
 //     the identity key in test/fixtures/identity.pem);
-//  2. validates everyapp.config.ts with the CLI's strict schema, and that
-//     every email.inbound domain is one of the senders' domains;
+//  2. validates everyapp.config.ts with the CLI's strict schema;
 //  3. builds for production (`cf build`), logins hidden;
-//  4. runs the CLI's appPolicyProblems()/prepareAppBuildOutput() on the
-//     Build Output (scripts/policy-check.ts, through jiti);
+//  4. installs the Build Output for that target, then runs the CLI's
+//     appPolicyProblems()/prepareAppBuildOutput() (scripts/policy-check.ts);
 //  5. asserts the built worker.config.json: the Durable Object exports, the
 //     bucket and audience named after the Worker, no triggers, no AI or
 //     send-email binding, nodejs_compat;
@@ -101,23 +100,15 @@ try {
 	const manifest = policyCheck(["manifest", appDir]).result as {
 		id: string;
 		durableObjects: string[];
-		senders: string[];
-		inbound: string[];
+		inbound: boolean;
 	};
 	check(manifest.id === "agentic-inbox", "manifest validates strictly (id agentic-inbox)", manifest);
-	// Mailboxes are created only on the senders' domains (DOMAINS), and
-	// mail to an address without a mailbox is dropped: an inbound domain
-	// outside them would route mail nobody can receive.
-	const domainOf = (address: string) => address.slice(address.lastIndexOf("@") + 1).toLowerCase();
-	const senderDomains = [...new Set(manifest.senders.map(domainOf))];
-	const strayInbound = manifest.inbound.filter((address) => !senderDomains.includes(domainOf(address)));
-	check(manifest.inbound.length > 0, `email.inbound routes mail to the Worker (${manifest.inbound.join(", ")})`, manifest.inbound);
-	check(strayInbound.length === 0, "every email.inbound domain is a senders domain (mailboxes can exist there)", strayInbound);
+	check(manifest.inbound === true, "email.inbound declares the Worker's email handler", manifest.inbound);
 
 	// A clean production build: no stale development output.
 	fs.rmSync(outputDir, { recursive: true, force: true });
 	fs.rmSync(path.join(appDir, "build"), { recursive: true, force: true });
-	const buildLog = run("cf build (production)", cfBin, ["build"], appDir);
+	const buildLog = run("cf build (production)", cfBin, ["build"], appDir, { EVERYAPP_BUILD: "1" });
 	check(/Build complete/i.test(buildLog), "cf build completes");
 
 	const rootConfig = JSON.parse(fs.readFileSync(path.join(outputDir, "v0/config.json"), "utf8"));
@@ -157,7 +148,6 @@ try {
 	const refusedKinds = Object.entries(env).filter(([name, b]) => name === "AI" || name === "EMAIL" || b.type === "ai" || b.type === "send-email");
 	check(refusedKinds.length === 0, "no AI or send-email binding", refusedKinds);
 	check((config.compatibilityFlags ?? []).includes("nodejs_compat"), "compatibilityFlags has nodejs_compat", config.compatibilityFlags);
-	check(env["DOMAINS"]?.type === "text" && env["DOMAINS"].value === senderDomains.join(","), `DOMAINS is the senders' domains (${senderDomains.join(",")})`, env["DOMAINS"]);
 	check(env["EMAIL_ADDRESSES"]?.type === "json" && JSON.stringify(env["EMAIL_ADDRESSES"].value) === "[]", "EMAIL_ADDRESSES is []", env["EMAIL_ADDRESSES"]);
 	check(env["AI_PROVIDER"]?.type === "text" && env["AI_PROVIDER"].value === "workers-ai", "AI_PROVIDER defaults to workers-ai", env["AI_PROVIDER"]);
 	const secrets = Object.entries(env).filter(([, b]) => b.type === "secret").map(([name]) => name).sort();

@@ -8,7 +8,7 @@
  * `env.EMAIL.send(message)` becomes a POST to the gateway's
  * `/api/integrations/email/send`, attributed to the request's person (or the
  * background work's organization). The gateway checks the manifest grants
- * `email`, that `from` matches a sender pattern the manifest declares, and
+ * `email`, that `from` matches a sender pattern the installation allows, and
  * the mail budgets, then sends with its own Email Sending binding.
  *
  * A send throws an EmailSendError carrying the gateway's refusal code
@@ -49,7 +49,7 @@ type Recipients = Address | Address[];
  * person, or the organization's background work); the SDK attributes the
  * call with it. Deployed, the SDK posts to the gateway over the
  * EVERY_APP_GATEWAY binding. Under `everyapp dev` it applies the gateway's
- * checks (the message, the manifest's senders) and prints the mail, or sends
+ * checks (the message, EVERYAPP_EMAIL_SENDERS) and prints the mail, or sends
  * it through Email Sending's REST API with EMAIL_REST_API_TOKEN,
  * CLOUDFLARE_ACCOUNT_ID and EMAIL_FROM in `.dev.vars`.
  */
@@ -186,31 +186,29 @@ export async function discardAttachments(
 // -- Readiness, for GET /api/v1/config
 
 const READY_TTL_MS = 60_000;
-let readyCache: { ready: boolean; at: number } | undefined;
+type EmailConfig = { domains: string[]; ready: boolean };
+let readyCache: { config: EmailConfig; at: number } | undefined;
 
 /**
- * Whether sends would go through: the gateway's `GET /api/integrations/email`
- * (through the SDK's integrationStatus()) is `ready` (the manifest requests
- * `email` and the gateway has a sender and a transport) and accepts at least
- * one of the manifest's `senders` (a hosted gateway accepts none in v1, and
- * every mailbox sends as itself, never as the gateway's sender). Cached per
- * isolate for 60 s. Under `everyapp dev` the SDK answers for the gateway:
- * ready only when `.dev.vars` sets EMAIL_FROM (with EMAIL_REST_API_TOKEN and
- * CLOUDFLARE_ACCOUNT_ID too, dev mail really goes out; otherwise it is
- * printed and nothing is sent).
+ * Mailbox domains and send readiness from the installation's email status,
+ * cached for 60 s. In dev, senders come from EVERYAPP_EMAIL_SENDERS and
+ * readiness requires EMAIL_FROM in .dev.vars.
  */
-export async function emailSendingReady(env: Cloudflare.Env, now = Date.now()): Promise<boolean> {
-	if (readyCache && now - readyCache.at < READY_TTL_MS) return readyCache.ready;
+export async function emailConfig(env: Cloudflare.Env, now = Date.now()): Promise<EmailConfig> {
+	if (readyCache && now - readyCache.at < READY_TTL_MS) return readyCache.config;
 	try {
 		const status = await integrationStatus({ env, provider: "email" });
-		const senders: unknown = status.senders;
-		readyCache = { ready: status.ready === true && Array.isArray(senders) && senders.length > 0, at: now };
-		return readyCache.ready;
+		const config = {
+			domains: [...new Set(status.senders.map((sender) => sender.slice(sender.lastIndexOf("@") + 1)))],
+			ready: status.ready === true && status.senders.length > 0,
+		};
+		readyCache = { config, at: now };
+		return config;
 	} catch (error) {
 		if (!(error instanceof ConfigurationError)) {
 			console.error("Reading the gateway's email status failed:", (error as Error).message);
 		}
-		return false;
+		return { domains: [], ready: false };
 	}
 }
 

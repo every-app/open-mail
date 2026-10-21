@@ -5,7 +5,6 @@
 import { GatewayRefusalError, type SendEmailMessage, type SendEmailResult } from "@every-app/sdk/server";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import manifest from "../everyapp.config";
 import { Folders } from "../shared/folders";
 import { emailAdapter, resetEmailReadyCache } from "../workers/everyapp/email";
 import { withGateway } from "../workers/everyapp/gateway";
@@ -318,8 +317,8 @@ describe("withGateway()'s env.EMAIL: the SDK's sendEmail()", () => {
 	it("everyapp dev: a mailbox on a sender domain is printed (200, a Sent copy); one on another domain is refused (502)", async () => {
 		const info = vi.spyOn(console, "info").mockImplementation(() => {});
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		// everyAppWorker() passes the manifest's senders to the dev Worker.
-		const dev = gatewayEnv({ EVERYAPP_DEV: "1", EVERYAPP_EMAIL_SENDERS: JSON.stringify(manifest.capabilities.email.senders) });
+		// .dev.vars supplies this installation's senders.
+		const dev = gatewayEnv({ EVERYAPP_DEV: "1", EVERYAPP_EMAIL_SENDERS: JSON.stringify(["*@example.com"]) });
 
 		const address = await newMailbox();
 		const sent = await request(dev, "POST", `/api/v1/mailboxes/${address}/emails`, message(address));
@@ -339,17 +338,17 @@ describe("GET /api/v1/config", () => {
 	beforeEach(() => resetEmailReadyCache());
 	afterEach(() => resetEmailReadyCache());
 
-	it("lists DOMAINS and says ready: false without a gateway", async () => {
+	it("lists no domains and says ready: false without a gateway", async () => {
 		const response = await request(envWith(accept), "GET", "/api/v1/config");
-		expect(await response.json()).toEqual({ domains: ["example.com"], emailAddresses: [], ready: false });
+		expect(await response.json()).toEqual({ domains: [], emailAddresses: [], ready: false });
 	});
 
 	it("says ready: true when the gateway's email status is ready and accepts the app's senders", async () => {
 		const gateway = fakeGateway(() =>
-			Response.json({ capability: "email", requested: true, configured: true, ready: true, sender: null, senders: ["*@example.com"] }),
+			Response.json({ capability: "email", requested: true, configured: true, ready: true, sender: null, senders: ["*@example.com", "support@example.com", "*@mail.example.org"] }),
 		);
 		const response = await request(gatewayEnv({ EVERY_APP_GATEWAY: gateway.binding }), "GET", "/api/v1/config");
-		expect(await response.json()).toEqual({ domains: ["example.com"], emailAddresses: [], ready: true });
+		expect(await response.json()).toEqual({ domains: ["example.com", "mail.example.org"], emailAddresses: [], ready: true });
 		expect(gateway.calls.map((c) => c.url)).toEqual(["http://every-app-gateway.internal/api/integrations/email"]);
 	});
 });

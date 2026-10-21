@@ -20,7 +20,7 @@ import { handleReplyEmail, handleForwardEmail } from "./routes/reply-forward";
 import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
-import { discardAttachments, emailSendingReady, sendFailure } from "./everyapp/email";
+import { discardAttachments, emailConfig, sendFailure } from "./everyapp/email";
 
 type AppContext = Context<MailboxContext>;
 
@@ -87,12 +87,10 @@ app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
 // -- Config ---------------------------------------------------------
 
 app.get("/api/v1/config", async (c) => {
-	const domainsRaw = c.env.DOMAINS || "";
-	const domains = domainsRaw.split(",").map((d) => d.trim()).filter(Boolean);
 	const emailAddresses = c.env.EMAIL_ADDRESSES ?? [];
 	// Every App: whether the gateway would send (its email capability is
 	// granted and configured), so the UI can say sending isn't set up.
-	const ready = await emailSendingReady(c.env);
+	const { domains, ready } = await emailConfig(c.env);
 	return c.json({ domains, emailAddresses, ready });
 });
 

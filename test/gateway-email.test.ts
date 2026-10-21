@@ -3,12 +3,11 @@
 import { EMAIL_SENDERS_ENV, parseSendEmailMessage } from "@every-app/sdk/internal";
 import { ConfigurationError, GatewayRefusalError, type SendEmailMessage } from "@every-app/sdk/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import manifest from "../everyapp.config";
 import { sendEmail as upstreamSendEmail } from "../workers/email-sender";
 import {
 	EmailSendError,
 	emailAdapter,
-	emailSendingReady,
+	emailConfig,
 	gatewayEmail,
 	resetEmailReadyCache,
 	sendFailure,
@@ -21,9 +20,9 @@ function env(extra: Record<string, unknown> = {}) {
 	return { DOMAINS: "example.com", ...extra } as unknown as Cloudflare.Env;
 }
 
-/** `everyapp dev`: everyAppWorker() passes the manifest's senders to the Worker. */
+/** `everyapp dev`: .dev.vars supplies this installation's senders. */
 function devEnv(extra: Record<string, unknown> = {}) {
-	return env({ EVERYAPP_DEV: "1", [EMAIL_SENDERS_ENV]: JSON.stringify(manifest.capabilities.email.senders), ...extra });
+	return env({ EVERYAPP_DEV: "1", [EMAIL_SENDERS_ENV]: JSON.stringify(["*@example.com"]), ...extra });
 }
 
 type Call = { method: string; url: string; headers: Headers; body: unknown };
@@ -297,39 +296,39 @@ describe("sendFailure", () => {
 	});
 });
 
-describe("emailSendingReady", () => {
+describe("emailConfig", () => {
 	const ready = { capability: "email", requested: true, configured: true, ready: true, sender: { address: "noreply@example.com", name: "Inbox" }, senders: ["*@example.com"] };
 
 	it("reads the gateway's GET /api/integrations/email and caches the answer for 60 s", async () => {
 		let status: object = ready;
 		const gateway = fakeGateway(() => Response.json(status));
 		const e = env({ EVERY_APP_GATEWAY: gateway.binding });
-		await expect(emailSendingReady(e, 1_000)).resolves.toBe(true);
+		await expect(emailConfig(e, 1_000)).resolves.toEqual({ domains: ["example.com"], ready: true });
 		expect(gateway.calls.map((c) => `${c.method} ${c.url}`)).toEqual([`GET ${GATEWAY}/api/integrations/email`]);
 		status = { ...ready, configured: false, ready: false, sender: null };
-		await expect(emailSendingReady(e, 60_999)).resolves.toBe(true);
+		await expect(emailConfig(e, 60_999)).resolves.toEqual({ domains: ["example.com"], ready: true });
 		expect(gateway.calls).toHaveLength(1);
-		await expect(emailSendingReady(e, 61_000)).resolves.toBe(false);
+		await expect(emailConfig(e, 61_000)).resolves.toEqual({ domains: ["example.com"], ready: false });
 		expect(gateway.calls).toHaveLength(2);
 	});
 
 	it("is false when the gateway accepts none of the app's senders (a hosted gateway), since every mailbox sends as itself", async () => {
 		const gateway = fakeGateway(() => Response.json({ ...ready, senders: [] }));
-		await expect(emailSendingReady(env({ EVERY_APP_GATEWAY: gateway.binding }))).resolves.toBe(false);
+		await expect(emailConfig(env({ EVERY_APP_GATEWAY: gateway.binding }))).resolves.toEqual({ domains: [], ready: false });
 	});
 
 	it("is false when the gateway answers with an error", async () => {
 		const gateway = fakeGateway(() => refusalResponse(403, "capability_not_requested", "The app doesn't list email."));
-		await expect(emailSendingReady(env({ EVERY_APP_GATEWAY: gateway.binding }))).resolves.toBe(false);
+		await expect(emailConfig(env({ EVERY_APP_GATEWAY: gateway.binding }))).resolves.toEqual({ domains: [], ready: false });
 	});
 
 	it("under everyapp dev follows .dev.vars: false while mail is only printed, true with EMAIL_FROM", async () => {
-		await expect(emailSendingReady(devEnv(), 1_000)).resolves.toBe(false);
+		await expect(emailConfig(devEnv(), 1_000)).resolves.toEqual({ domains: ["example.com"], ready: false });
 		resetEmailReadyCache();
-		await expect(emailSendingReady(devEnv({ EMAIL_FROM: "noreply@example.com" }), 1_000)).resolves.toBe(true);
+		await expect(emailConfig(devEnv({ EMAIL_FROM: "noreply@example.com" }), 1_000)).resolves.toEqual({ domains: ["example.com"], ready: true });
 	});
 
 	it("is false on a deployed Worker without the gateway binding", async () => {
-		await expect(emailSendingReady(env())).resolves.toBe(false);
+		await expect(emailConfig(env())).resolves.toEqual({ domains: [], ready: false });
 	});
 });

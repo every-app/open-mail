@@ -25,10 +25,6 @@ export default defineConfig((ctx) => {
         // Mailbox settings (mailboxes/<address>.json) and attachments, in a
         // bucket named after the Worker.
         BUCKET: bindings.r2({ name: worker.name }),
-        // The domains mailboxes may be created on, comma-separated: the
-        // domains of the manifest's email senders, since the gateway
-        // refuses mail from any other (everyapp.config.ts).
-        DOMAINS: bindings.text(senderDomains(manifest.capabilities.email.senders)),
         // Upstream's mailbox allowlist; off (organization roles replace it).
         EMAIL_ADDRESSES: bindings.json([] as string[]),
         // "workers-ai" (default) or "openrouter": which gateway AI provider
@@ -40,16 +36,3 @@ export default defineConfig((ctx) => {
     },
   };
 });
-
-/**
- * The domains `capabilities.email.senders` names, comma-separated and in
- * order: `["*@example.com", "support@mail.example.org"]` gives
- * "example.com,mail.example.org". An exact address offers its whole domain
- * in the picker; the gateway still sends only as that address.
- */
-function senderDomains(senders: readonly string[]): string {
-  const domains = senders.map((sender) =>
-    sender.slice(sender.lastIndexOf("@") + 1).toLowerCase(),
-  );
-  return [...new Set(domains.filter(Boolean))].join(",");
-}

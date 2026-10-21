@@ -33,39 +33,17 @@ export default {
       "moonshotai/kimi-k2.6",
     ],
   },
-  // Outbound mail goes through the gateway's email capability
-  // (workers/everyapp/email.ts): each mailbox sends from its own address,
-  // and the gateway refuses a From that no `senders` pattern matches.
-  // `senders` names the sending domains, one "*@<domain>" per domain
-  // onboarded to the gateway's email provider (Email Sending in the
-  // gateway's Cloudflare account, or verified in Resend): at most 20,
-  // lowercase, no duplicates. The domains offered for new mailboxes
-  // (DOMAINS) are derived from this list in cloudflare.config.ts.
-  // "*@example.com" is a placeholder: replace it together with
-  // email.inbound below. A good mail domain is a zone in the gateway's
-  // Cloudflare account, on Cloudflare DNS, whose MX records nothing else
-  // uses (Email Routing takes them over). `pnpm check:deploy` checks the
-  // pair offline; then redeploy (docs/EVERY_APP.md, "Deploy it" step 9).
+  // Configure this installation's addresses with `everyapp email set
+  // --sender <pattern> --inbound <address>` after its first deploy.
   capabilities: {
     email: {
       access: "write",
       why: "Sends mail from the organization's mailboxes on its own domain.",
-      senders: ["*@example.com"],
     },
   },
-  // Inbound mail reaches the Worker's email() handler through Email Routing
-  // rules `everyapp deploy` creates from this list (and deletes when an
-  // address leaves it): "*@<domain>" is the zone's catch-all, which exists
-  // only on a zone's apex; any other address ("support@mail.example.com")
-  // gets a rule of its own. At most 50 addresses, lowercase. List the
-  // domains of `senders` here too: mailboxes are created only on those, and
-  // mail to an address without a mailbox is dropped. The deploy asks before
-  // it turns Email Routing on for a domain (unattended:
-  // --enable-email-routing), and refuses a domain that isn't on a zone in
-  // the gateway's account. "*@example.com" is a placeholder, like the sender
-  // above. Edit it, then redeploy.
+  // Declares the Worker's email() handler; addresses belong to the installation.
   email: {
-    inbound: ["*@example.com"],
+    inbound: true,
   },
   // No `mcp` setting: the gateway serves `/mcp` from the app's defineTools()
   // catalog (workers/everyapp/tools.ts).

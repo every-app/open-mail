@@ -30,9 +30,9 @@ function env(extra: Record<string, unknown> = {}) {
 
 describe("withGateway", () => {
 	it("keeps the env and adds AI and EMAIL without needing a gateway or a key until a model is called", () => {
-		const base = env({ DOMAINS: "example.com" });
+		const base = env({ AI_PROVIDER: "openrouter" });
 		const wrapped = withGateway(base);
-		expect(wrapped.DOMAINS).toBe("example.com");
+		expect(wrapped.AI_PROVIDER).toBe("openrouter");
 		expect(typeof wrapped.AI.run).toBe("function");
 		expect(typeof wrapped.EMAIL.send).toBe("function");
 	});

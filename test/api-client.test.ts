@@ -53,7 +53,7 @@ describe("send refusals", () => {
 		expect(error.status).toBe(502);
 		expect(error.code).toBe("email_sender_not_allowed");
 		expect(error.message).toBe(
-			"This mailbox's domain isn't one this app may send from. An owner adds it to capabilities.email.senders in everyapp.config.ts and redeploys.",
+			"This mailbox's domain isn't one this app may send from. An owner adds it with everyapp email set --sender.",
 		);
 		expect(calls[0].url).toBe("/api/v1/mailboxes/info@other.example/emails");
 		expect(calls[0].init?.method).toBe("POST");
