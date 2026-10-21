@@ -5,6 +5,7 @@ export default {
   name: "Agentic Inbox",
   description:
     "A team inbox with an AI agent: receive, read, draft and send email on your own domain.",
+  icon: "/everyapp-icon.svg",
   resources: {
     // SQLite Durable Objects, exported by workers/app.ts. MAILBOX holds one
     // mailbox's folders and emails, EMAIL_AGENT its chat agent.
