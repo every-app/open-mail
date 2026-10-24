@@ -20,11 +20,11 @@ In short, with a gateway installed (`pnpm everyapp setup` in the Every App check
 
 1. **OpenRouter**: `pnpm everyapp secret set OPENROUTER_API_KEY` (a key from https://openrouter.ai/settings/keys). The manifest requires it: the gateway doesn't open the app until it is set. Deploy with `AI_PROVIDER=openrouter` to use it; the build still defaults to Workers AI (`pnpm everyapp secret set WORKERS_AI_API_TOKEN`, optional in the manifest) until its own PR flips the default.
 2. **Your mail domain**: onboard it to Email Sending (its zone on Cloudflare DNS in the gateway's account).
-3. **Declare your mail domain** in `everyapp.config.ts`: the senders (`capabilities.email.senders: ["*@example.com"]`) and the inbound addresses (`email.inbound: ["*@example.com"]`).
-4. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It uploads the Worker `every-<orgKey>-agentic-inbox`, turns on Email Routing for the domain if you agree, and creates the catch-all rule that hands inbound mail to the Worker.
+3. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It uploads the Worker `every-<orgKey>-agentic-inbox`.
+4. **Set your mail domain** on the installation, not in the manifest: `pnpm everyapp email set --sender '*@example.com' --inbound '*@example.com'`. The gateway then sends as those addresses, turns on Email Routing for the domain if you agree, and routes its mail to the Worker. `pnpm everyapp email show` prints them.
 5. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
 
-Nothing has been deployed to a real account yet; the runbook's "Verified locally" section shows the local end-to-end run, and `TODO.md` lists what the first live deploy has to check.
+Deployed: the app is live at `https://agentic-inbox.everyapp.team/` with mail on `hi.openseo.so`, its senders set with `pnpm everyapp email set --sender`.
 
 ## Features
 
@@ -43,15 +43,17 @@ Nothing has been deployed to a real account yet; the runbook's "Verified locally
 
 ## Getting Started
 
-You need Node 22+, pnpm 10, and the Every App repository checked out beside this one as `../private-every-app`. The Every App SDK and CLI are linked from it.
+You need Node 22+, pnpm 10, and [every-app/private-every-app](https://github.com/every-app/private-every-app) cloned next to this repository, as `../private-every-app`: `@every-app/sdk` and the `everyapp` CLI are `link:` dependencies on it (see `package.json`). Run `pnpm install` there once (it builds the SDK), then `pnpm install` here. A lone clone installs with dangling symlinks, and `pnpm dev` fails with `everyapp: command not found`.
 
 ```bash
-(cd ../private-every-app && pnpm install && pnpm -C packages/sdk build)
+git clone git@github.com:every-app/private-every-app.git ../private-every-app
+(cd ../private-every-app && pnpm install)   # once: it builds the SDK
 pnpm install
-pnpm everyapp dev        # http://agentic-inbox.localhost:8787, signed in as a seeded owner
+cp .dev.vars.example .dev.vars              # optional: AI keys, a real mail transport
+pnpm everyapp dev                           # http://agentic-inbox.localhost:8787, signed in as a seeded owner
 ```
 
-`pnpm test`, `pnpm types:check`, `pnpm build` and `pnpm check:deploy` (the deploy's own checks, offline) are described in [docs/EVERY_APP.md](docs/EVERY_APP.md#tests-and-checks).
+`pnpm test`, `pnpm types:check`, `pnpm build`, `pnpm check:deploy` (what `everyapp deploy` checks before it uploads, run offline on a production build) and `pnpm check:runbook` (every name the runbook says to `secret set` is a Gateway setting) are described in [docs/EVERY_APP.md](docs/EVERY_APP.md#tests-and-checks).
 
 ## Prerequisites
 

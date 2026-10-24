@@ -2,18 +2,7 @@
 
 This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) as a private app behind an [Every App](https://github.com/every-app/private-every-app) gateway. It deploys as one Worker, `every-<orgKey>-agentic-inbox`, which the gateway reaches over a service binding. The Worker has no workers.dev URL, no routes and no app secrets. The gateway signs people in, brokers the model calls (OpenRouter by default, or Workers AI), sends the mail, and serves the MCP tools.
 
-> **Status (2026-10-18).** Every port lane is merged on `everyapp`. Nothing here has run against a real Cloudflare account yet: "Verified locally" below is the end-to-end run on a laptop, and "First live deploy" lists what only a real account can prove. The platform changes the port needs are all merged on the Every App repository's `main`; deploy from a checkout at or after `e3a75f7a`:
->
-> | Platform PR | What the inbox needs it for | Status |
-> | --- | --- | --- |
-> | #322 `port/workers-ai-provider` | the gateway's `workers-ai` AI provider and `WORKERS_AI_API_TOKEN` | **merged** (`254b774d`) |
-> | #323 `port/sdk-port-ergonomics` | the runtime `ExecutionContext` in `everyApp()`, typed Durable Object namespaces | **merged** (`a5cb90cb`) |
-> | #325 `port/email-capability` | the gateway `email` capability: `capabilities.email.senders` in the manifest, sends through the gateway | **merged** (`10368fab`) |
-> | #327 `port/inbound-email-routes` | `everyapp deploy` creates the Email Routing rules from the manifest's `email.inbound` | **merged** (`ae9957ee`) |
-> | #329 `port/email-providers` | the gateway's email provider: Cloudflare Email Sending or Resend (`RESEND_API_KEY`, `EMAIL_PROVIDER`) | **merged** (`f52c3f94`) |
-> | #330 `cli/secret-bulk-body` | `everyapp secret set` really sets a Gateway setting's value (before it, the new gateway version carried no new secret; the `--for gateway` flag it took then is gone, the CLI routes each name by itself) | **merged** (`a912b300`) |
->
-> The live gateway runs the release it was last set up with, not the checkout's: step 0 of "Deploy it" upgrades it.
+> **Status (2026-10-24).** Deployed: the app is live at `https://agentic-inbox.everyapp.team/` with mail on `hi.openseo.so`, its senders set with `pnpm everyapp email set --sender`.
 
 ## What changes from upstream
 
@@ -32,7 +21,7 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 
 ## Two shapes
 
-|  | An organization's own copy (supported) | Shared first party (`--shared`, not supported) |
+|  | An organization's own copy (supported) | Shared first party (not supported) |
 | --- | --- | --- |
 | Who deploys it | An owner of the gateway's Cloudflare account, with `everyapp deploy` | Every App, on a hosted gateway |
 | Organizations it serves | One | Every organization on the gateway |
@@ -40,7 +29,7 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 | Mailboxes | Durable Objects named by address and R2 keys `mailboxes/<address>.json`: the whole bucket belongs to the one organization | Would need organization-scoped names and keys, and a domain-to-organization index for inbound mail |
 | Sending domains | The manifest's `senders`, one set per deploy | Per-organization domains (follow-up) |
 
-**Do not deploy with `--shared`.** Mailboxes aren't scoped by organization. In a shared Worker, every organization's members would see every mailbox. Nothing in the port rules the shared shape out; it needs the scoping above first (see `TODO.md`).
+**There is no shared deploy.** The CLI's `--shared` flag is gone, and mailboxes aren't scoped by organization: in a shared Worker, every organization's members would see every mailbox. Nothing in the port rules the shared shape out; it needs the scoping above first (see `TODO.md`).
 
 ## How it works
 
@@ -57,10 +46,11 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 
 ## Run it locally
 
-You need Node 22+, pnpm 10, and the Every App repository checked out beside this one as `../private-every-app` on `main`. The SDK and CLI are linked from it (`link:` dependencies) while publishing is paused. Build the SDK there first:
+You need Node 22+, pnpm 10, and [every-app/private-every-app](https://github.com/every-app/private-every-app) cloned next to this repository as `../private-every-app`, on `main`. The SDK and CLI are linked from it (`link:` dependencies in `package.json`) while publishing is paused: run `pnpm install` there once (it builds the SDK), then here. A lone clone installs with dangling symlinks, and `pnpm dev` fails with `everyapp: command not found`.
 
 ```bash
-(cd ../private-every-app && pnpm install && pnpm -C packages/sdk build)
+git clone git@github.com:every-app/private-every-app.git ../private-every-app
+(cd ../private-every-app && pnpm install)   # once: it builds the SDK
 pnpm install
 cp .dev.vars.example .dev.vars    # optional: AI keys, a real mail transport
 pnpm everyapp dev                 # or: pnpm everyapp dev --port 8801
@@ -81,7 +71,7 @@ pnpm everyapp dev                 # or: pnpm everyapp dev --port 8801
 | `pnpm test` | Vitest, two projects (`vitest.config.ts`). `node`: unit tests with fake bindings (the gateway shims, identity, the tool catalog, frontend helpers). `workers`: tests inside workerd through `@cloudflare/vitest-pool-workers`. The production entry is the Worker there, against the real Durable Objects and a local R2 bucket (inbound mail through `receiveEmail()`, the entry's identity check). A file runs in `workers` when it is named `*.workers.test.ts` (or `test/receive-email.test.ts`). The workers project shares storage between tests, so use a fresh mailbox address in each |
 | `pnpm types:check` | `cf workers types` (the Worker's `Env` from `cloudflare.config.ts`), `react-router typegen`, `tsc --noEmit` |
 | `pnpm build` | A development build of the client and the Worker, then `tsc` |
-| `pnpm check:deploy` | What `everyapp deploy` checks before it uploads, offline: the manifest against the CLI's strict schema (and every `email.inbound` domain among the senders' domains), a production `cf build` with fake deploy inputs, the CLI's Build Output policy, and the built Worker's bindings (no `ai`, no `send_email`, no triggers, the bucket and audience named after the Worker) |
+| `pnpm check:deploy` | What `everyapp deploy` checks before it uploads, offline: the manifest against the CLI's strict schema (and that it declares `email.inbound`), a production `cf build` with fake deploy inputs (the script sets `EVERYAPP_BUILD=1` for it and hides every login; you set nothing), the CLI's Build Output policy, and the built Worker's bindings (no `ai`, no `send_email`, no triggers, the bucket and audience named after the Worker, `AI_PROVIDER` at its build default) |
 | `pnpm check:runbook` | Every setting this runbook tells you to set with `everyapp secret set` is a Gateway setting the command accepts, by the SDK's own list, and none would be taken for an app secret (offline) |
 
 **CI.** The venue has no CI. Its `link:` dependencies need the platform checkout beside it, so a hosted runner can't install it as is. When the SDK and CLI are published again, switch the links to versions and run the commands above in CI.
@@ -256,7 +246,7 @@ These steps assume a gateway installed with `pnpm everyapp setup` from the platf
 
 | # | Where | What | Command / step | Needs |
 | --- | --- | --- | --- | --- |
-| 0 | the platform checkout | Upgrade the live gateway to a release with #322, #325 and #329 (the PRs that change the gateway; #327 and #330 are the CLI, which runs from the checkout). While it runs an older one, `pnpm everyapp status` says under "To do": "This checkout's Gateway sources changed since the live release was built; setup upgrades it now, and so does the next deploy or delete of an app that has to rebind it. Run: pnpm everyapp setup". This app's first deploy would upgrade it too (step 10), but do it first: the settings below are for the new release. The upgrade keeps the gateway's database (migrations run first, with a restore point), its users, apps and secrets | `git pull --ff-only`, `pnpm install && pnpm -C packages/sdk build`, then `pnpm everyapp setup`. It prints `Upgrading the gateway to release …` and `Gateway … is live at https://<gateway domain>.` | #322, #325, #329 |
+| 0 | the platform checkout | Upgrade the live gateway to the checkout's release. Every platform change the port needs (#322 to #330) is on `main`: #322, #325 and #329 change the gateway, #327 and #330 the CLI, which runs from the checkout. While the gateway runs an older release, `pnpm everyapp status` says so under "To do" and names the command. This app's first deploy would upgrade it too (step 10), but do it first: the settings below are for the new release. The upgrade keeps the gateway's database (migrations run first, with a restore point), its users, apps and secrets | `git pull --ff-only`, `pnpm install` (it builds the SDK), then `pnpm everyapp update`. It prints `Upgrading the Gateway to …` and `The Gateway (…) is live at https://<gateway domain>` | #322, #325, #329 |
 | 1 | Cloudflare account | Workers Paid | Dashboard → Workers & Pages → Plans | |
 | 2 | OpenRouter | An API key for the gateway: the provider the manifest requires | https://openrouter.ai/settings/keys | |
 | 3 | gateway | `OPENROUTER_API_KEY`, **required** by the manifest. Until it is set the gateway doesn't open the app: the launcher card says "Needs setup" with this command, and `pnpm everyapp status` lists it under SETTINGS as `! not set` | `pnpm everyapp secret set OPENROUTER_API_KEY` (a hidden prompt asks for the value) | |
@@ -285,7 +275,7 @@ The checklist is in `TODO.md` under "Check on the first live deploy", each item 
 
 ## What is not done
 
-- **The shared first-party shape** (`--shared`). It needs mailboxes scoped by organization, a domain-to-organization index for inbound mail, and per-organization sending domains. See "Two shapes".
+- **The shared first-party shape.** It needs mailboxes scoped by organization, a domain-to-organization index for inbound mail, and per-organization sending domains. See "Two shapes".
 - **Per-mailbox permissions.** Anyone in the organization can use every mailbox. That is upstream's model, with the gateway's organization in place of the Access policy.
 - **Deleting a mailbox** removes its settings only. Its Durable Object data and R2 attachments stay (an upstream TODO).
 - **The `EMAIL_ADDRESSES` allowlist** is off (`[]`); organization roles replace it.

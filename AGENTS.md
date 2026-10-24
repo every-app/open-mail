@@ -4,17 +4,24 @@ This is [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) 
 
 ## Setup
 
-- The Every App repository must sit beside this one as `../private-every-app`, on `main`. `@every-app/sdk` and the `everyapp` CLI are `link:` dependencies on it. Build the SDK there before installing: `pnpm -C ../private-every-app/packages/sdk build`.
+- The Every App repository ([every-app/private-every-app](https://github.com/every-app/private-every-app)) must sit beside this one as `../private-every-app`, on `main`. `@every-app/sdk` and the `everyapp` CLI are `link:` dependencies on it. Run `pnpm install` there once (it builds the SDK), then install here. Without that checkout the links dangle, and `pnpm dev` fails with `everyapp: command not found`.
 - In a git worktree outside the parent directory, the relative `link:` paths point nowhere. Make `<worktree>/../private-every-app` a symlink to the checkout.
 - pnpm only (`packageManager` pins it). Install with `pnpm install --ignore-scripts`: upstream code is third party, and nothing here needs an install script (`pnpm-workspace.yaml` lists the skipped ones).
 
 ## Commands
 
 - `pnpm types:check`, `pnpm test`, `pnpm build`: run all three before you hand work back.
-- `pnpm check:deploy`: the deploy's own checks on a production build, offline. `pnpm check:runbook`: the runbook's gateway secrets are ones the CLI accepts.
+- `pnpm check:deploy`: what `everyapp deploy` checks before it uploads, offline: the manifest against the CLI's strict schema, a production `cf build` (the script sets `EVERYAPP_BUILD=1` for it and hides every login; you set nothing), the CLI's Build Output policy, and the built Worker's bindings (no `ai`, no `send_email`, no triggers, `AI_PROVIDER` at its build default). `pnpm check:runbook`: every name `docs/EVERY_APP.md` says to `everyapp secret set` is a Gateway setting the CLI accepts, by the SDK's own list, offline.
 - `bash scripts/verify-local.sh <gateway port> <vite port> [dev log]` against a running `everyapp dev`: the port's whole local end-to-end check (sends, refusals, inbound mail, the agent, MCP). Run it after an upstream merge.
 - `pnpm everyapp dev --port <port>`: the app behind a local gateway-lite at `http://agentic-inbox.localhost:<port>`, as the seeded owner `dev@everyapp.localhost`. Pick a free port; many dev servers may be running. Stop yours when done.
-- Never run `everyapp deploy`, `setup`, `register`, `secret set`, `secret unset` or `delete`, `cf deploy`, or anything else that talks to a live Cloudflare account, unless the person you work for asked for exactly that. The read-only `pnpm everyapp secret list` and `pnpm everyapp status` are fine: they say which settings are set and print names, never values. The `cf` login on a maintainer's machine is a real account. If you must read cf's validation, hide the login: `XDG_CONFIG_HOME=$(mktemp -d) CI=1`.
+- Never run `everyapp deploy`, `setup`, `update`, `install`, `secret set`, `secret unset`, `email set`, `email unset`, `access on|off` or `delete`, `cf deploy`, or anything else that talks to a live Cloudflare account, unless the person you work for asked for exactly that. The read-only `pnpm everyapp secret list` (which Gateway settings the app needs, required or optional, and whether each is set), `pnpm everyapp email show` and `pnpm everyapp status` are fine: they print names, never values. The `cf` login on a maintainer's machine is a real account. If you must read cf's validation, hide the login: `XDG_CONFIG_HOME=$(mktemp -d) CI=1`.
+
+## Every App
+
+- Run it with `pnpm dev` (`everyapp dev`). Deploy only with `pnpm everyapp deploy`, or `pnpm run deploy` (the package's `deploy` script, `everyapp deploy`), from this directory; the live copy is `agentic-inbox.everyapp.team`.
+- `everyapp.config.ts` is the manifest: the resources (two Durable Objects), the AI providers and models, the `email` capability and `email.inbound`. An app's own secrets would be declared there too; this one has none. The Gateway settings it needs (`OPENROUTER_API_KEY`, required; `WORKERS_AI_API_TOKEN`, optional; `EMAIL_FROM`, required by the `email` capability) are set by the person with `pnpm everyapp secret set <NAME>`, from any directory.
+- Senders and inbound addresses belong to the installation, not the manifest: `pnpm everyapp email set --sender '*@<domain>' --inbound '*@<domain>'` after the first deploy; `pnpm everyapp email show` prints them.
+- The `everyapp` skill (every command and flag, the manifest, secrets, email, deploy) is in the platform checkout at `../private-every-app/packages/cli/skills/everyapp/SKILL.md`. Read it before running any `everyapp` command.
 
 ## Where changes go
 
