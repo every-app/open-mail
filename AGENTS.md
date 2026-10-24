@@ -14,7 +14,7 @@ This is [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) 
 - `pnpm check:deploy`: the deploy's own checks on a production build, offline. `pnpm check:runbook`: the runbook's gateway secrets are ones the CLI accepts.
 - `bash scripts/verify-local.sh <gateway port> <vite port> [dev log]` against a running `everyapp dev`: the port's whole local end-to-end check (sends, refusals, inbound mail, the agent, MCP). Run it after an upstream merge.
 - `pnpm everyapp dev --port <port>`: the app behind a local gateway-lite at `http://agentic-inbox.localhost:<port>`, as the seeded owner `dev@everyapp.localhost`. Pick a free port; many dev servers may be running. Stop yours when done.
-- Never run `everyapp deploy`, `setup`, `register`, `secret` or `delete`, `cf deploy`, or anything else that talks to a live Cloudflare account, unless the person you work for asked for exactly that. The `cf` login on a maintainer's machine is a real account. If you must read cf's validation, hide the login: `XDG_CONFIG_HOME=$(mktemp -d) CI=1`.
+- Never run `everyapp deploy`, `setup`, `register`, `secret set`, `secret unset` or `delete`, `cf deploy`, or anything else that talks to a live Cloudflare account, unless the person you work for asked for exactly that. The read-only `pnpm everyapp secret list` and `pnpm everyapp status` are fine: they say which settings are set and print names, never values. The `cf` login on a maintainer's machine is a real account. If you must read cf's validation, hide the login: `XDG_CONFIG_HOME=$(mktemp -d) CI=1`.
 
 ## Where changes go
 

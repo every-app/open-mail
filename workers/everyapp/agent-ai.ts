@@ -6,7 +6,9 @@
  * The chat panel renders the assistant's text and tool calls but not a
  * stream error (upstream's AgentPanel reads no `error`), so a failure reaches
  * the person as an assistant message: "AI isn't set up on this gateway
- * (WORKERS_AI_API_TOKEN) or in .dev.vars", or the gateway's refusal.
+ * (OPENROUTER_API_KEY) or in .dev.vars", "The AI provider isn't set up on
+ * this gateway. An admin sets …" (the key missing on the gateway), or the
+ * gateway's refusal.
  */
 import {
 	ConfigurationError,
@@ -20,7 +22,7 @@ import {
 	type UIMessage,
 	type UIMessageChunk,
 } from "ai";
-import { providerOf } from "./gateway";
+import { aiProviderNotSetUpMessage, providerOf } from "./gateway";
 
 /**
  * Whom a mailbox's agent calls are for. Nothing a person sent starts them
@@ -65,16 +67,19 @@ export function aiSetupProblem(env: Cloudflare.Env, target?: GatewayCallFor): st
 }
 
 /**
- * A failed model call as a sentence: the configuration message, the
- * gateway's refusal with its code (`model_not_allowed`,
- * `ai_provider_not_configured`, …, read from the response body), or the
- * provider's own error. (An AttributionError can only come from making the
- * gateway fetch, which aiSetupProblem() does first and throws.)
+ * A failed model call as a sentence: the configuration message, the sentence
+ * naming the key to set when the selected provider isn't configured on the
+ * gateway (`ai_provider_not_configured`: aiProviderNotSetUpMessage()), any
+ * other gateway refusal with its code (`model_not_allowed`, …, read from the
+ * response body), or the provider's own error. (An AttributionError can only
+ * come from making the gateway fetch, which aiSetupProblem() does first and
+ * throws.)
  */
 export function aiFailureMessage(env: Cloudflare.Env, error: unknown): string {
 	if (error instanceof ConfigurationError) return aiNotSetUpMessage(env);
 	if (APICallError.isInstance(error)) {
 		const refusal = refusalOf(error);
+		if (refusal?.code === "ai_provider_not_configured") return aiProviderNotSetUpMessage(env);
 		if (refusal) return `The gateway refused the AI call: ${refusal.message} (${refusal.code})`;
 		return `The AI provider answered ${error.statusCode ?? "with an error"}: ${error.message || "no details"}`;
 	}

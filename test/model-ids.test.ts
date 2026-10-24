@@ -65,17 +65,18 @@ describe("model ids", () => {
 		}
 	});
 
-	it("the default agent model is llama-4-scout (function calling, 300 requests a minute)", () => {
+	it("the default agent model is llama-4-scout on Workers AI (function calling, 300 requests a minute) and claude-haiku-5.5 on OpenRouter", () => {
 		expect(agentModelId(env("workers-ai"))).toBe("@cf/meta/llama-4-scout-17b-16e-instruct");
-		expect(agentModelId(env("openrouter"))).toBe("meta-llama/llama-4-scout");
+		expect(agentModelId(env("openrouter"))).toBe("anthropic/claude-haiku-5.5");
 	});
 
-	it("ai.models is exactly the six ids the app uses, unique and within the manifest's limits", () => {
+	it("ai.models is exactly the seven ids the app uses, unique and within the manifest's limits", () => {
 		expect([...allowed].sort()).toEqual(
 			[
 				"@cf/meta/llama-3.1-8b-instruct-fast",
 				"@cf/meta/llama-4-scout-17b-16e-instruct",
 				"@cf/moonshotai/kimi-k2.6",
+				"anthropic/claude-haiku-5.5",
 				"meta-llama/llama-3.1-8b-instruct",
 				"meta-llama/llama-4-scout",
 				"moonshotai/kimi-k2.6",
@@ -86,6 +87,13 @@ describe("model ids", () => {
 			expect(model.length).toBeGreaterThan(0);
 			expect(model.length).toBeLessThanOrEqual(200);
 		}
-		expect(manifest.providers).toEqual(["workers-ai", "openrouter"]);
+		// Every provider the code knows is declared: OpenRouter first and required
+		// (what the gateway holds a key for), Workers AI optional (still the build
+		// default until its own PR flips it).
+		expect(manifest.providers.map((p) => [p.id, "optional" in p && p.optional === true])).toEqual([
+			["openrouter", false],
+			["workers-ai", true],
+		]);
+		expect([...manifest.providers.map((p) => p.id)].sort()).toEqual(Object.keys(PROVIDERS).sort());
 	});
 });

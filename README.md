@@ -14,11 +14,11 @@ Read the blog post to learn more about Cloudflare Email Service and how to use i
 
 ## Deploy on Every App
 
-This fork runs as a private app behind an [Every App](https://github.com/every-app/private-every-app) gateway, not with the Deploy to Cloudflare button. The gateway signs people in (the organization is the boundary: owners and admins manage mailboxes, members use them). It brokers Workers AI and outgoing mail, and serves the MCP tools. The app's Worker holds no secrets. **[docs/EVERY_APP.md](docs/EVERY_APP.md)** is the full runbook: what changes from upstream, how it works, running it locally, the deploy steps in order, and what isn't done yet.
+This fork runs as a private app behind an [Every App](https://github.com/every-app/private-every-app) gateway, not with the Deploy to Cloudflare button. The gateway signs people in (the organization is the boundary: owners and admins manage mailboxes, members use them). It brokers the model calls (OpenRouter by default, or Workers AI) and outgoing mail, and serves the MCP tools. The app's Worker holds no secrets. **[docs/EVERY_APP.md](docs/EVERY_APP.md)** is the full runbook: what changes from upstream, how it works, running it locally, the deploy steps in order, and what isn't done yet.
 
 In short, with a gateway installed (`pnpm everyapp setup` in the Every App checkout) on Workers Paid:
 
-1. **Workers AI**: from the Every App checkout, `pnpm everyapp secret set WORKERS_AI_API_TOKEN --for gateway` (an API token from the "Workers AI" template, Read and Edit).
+1. **OpenRouter**: `pnpm everyapp secret set OPENROUTER_API_KEY` (a key from https://openrouter.ai/settings/keys). The manifest requires it: the gateway doesn't open the app until it is set. Deploy with `AI_PROVIDER=openrouter` to use it; the build still defaults to Workers AI (`pnpm everyapp secret set WORKERS_AI_API_TOKEN`, optional in the manifest) until its own PR flips the default.
 2. **Your mail domain**: onboard it to Email Sending (its zone on Cloudflare DNS in the gateway's account).
 3. **Declare your mail domain** in `everyapp.config.ts`: the senders (`capabilities.email.senders: ["*@example.com"]`) and the inbound addresses (`email.inbound: ["*@example.com"]`).
 4. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It uploads the Worker `every-<orgKey>-agentic-inbox`, turns on Email Routing for the domain if you agree, and creates the catch-all rule that hands inbound mail to the Worker.
@@ -38,7 +38,7 @@ Nothing has been deployed to a real account yet; the runbook's "Verified locally
 
 - **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
 - **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
-- **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, Workers AI through the Every App gateway (`@cf/meta/llama-4-scout-17b-16e-instruct` by default), `react-markdown` + `remark-gfm`
+- **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, OpenRouter or Workers AI through the Every App gateway (`anthropic/claude-haiku-5.5` on OpenRouter), `react-markdown` + `remark-gfm`
 - **Auth:** the Every App gateway's signed identity, checked by `everyApp()` on every request
 
 ## Getting Started
@@ -57,7 +57,7 @@ pnpm everyapp dev        # http://agentic-inbox.localhost:8787, signed in as a s
 
 - An [Every App](https://github.com/every-app/private-every-app) gateway on a Cloudflare account with Workers Paid
 - A domain on Cloudflare DNS in the gateway's account, onboarded to [Email Sending](https://developers.cloudflare.com/email-service/) and with [Email Routing](https://developers.cloudflare.com/email-routing/) enabled
-- A Workers AI API token on the gateway (or an OpenRouter key)
+- An OpenRouter key on the gateway, deploying with `AI_PROVIDER=openrouter` (or a Workers AI API token for the default Workers AI build)
 
 Anyone in the organization that owns the app can use every mailbox, including through the gateway's MCP connector, where AI tools (Claude Code, Cursor, etc.) act on a mailbox by its address. There is no per-mailbox authorization: the gateway's organization is the trust boundary.
 

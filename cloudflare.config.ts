@@ -28,7 +28,11 @@ export default defineConfig((ctx) => {
         // Upstream's mailbox allowlist; off (organization roles replace it).
         EMAIL_ADDRESSES: bindings.json([] as string[]),
         // "workers-ai" (default) or "openrouter": which gateway AI provider
-        // the agent, the injection scanner and the draft verifier use.
+        // the agent, the injection scanner and the draft verifier use. The
+        // manifest requires OpenRouter's key and lists Workers AI's as
+        // optional (everyapp.config.ts); making openrouter the default here
+        // is its own PR, so until it lands pass AI_PROVIDER=openrouter when
+        // deploying.
         AI_PROVIDER: bindings.text(process.env.AI_PROVIDER ?? "workers-ai"),
         // The agent's model id; empty takes the provider's default.
         AGENT_MODEL: bindings.text(process.env.AGENT_MODEL ?? ""),

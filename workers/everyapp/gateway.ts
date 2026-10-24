@@ -48,15 +48,42 @@ export const PROVIDERS = {
 		settings: ["OPENROUTER_API_KEY"],
 		scanner: "meta-llama/llama-3.1-8b-instruct",
 		verifier: "meta-llama/llama-4-scout",
-		agent: "meta-llama/llama-4-scout",
+		// Llama 4 Scout writes tool calls out as text often enough to leave
+		// "draft_reply(...)" as a draft's body; Haiku calls them.
+		agent: "anthropic/claude-haiku-5.5",
 	},
 } as const;
 
 type ProviderEnv = Pick<Cloudflare.Env, "AI_PROVIDER" | "AGENT_MODEL">;
 
-/** The provider AI_PROVIDER selects; Workers AI unless it says "openrouter". */
+/** The provider id AI_PROVIDER selects; Workers AI unless it says "openrouter". */
+export function providerIdOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">): keyof typeof PROVIDERS {
+	return env.AI_PROVIDER === "openrouter" ? "openrouter" : "workers-ai";
+}
+
+/** The provider AI_PROVIDER selects. */
 export function providerOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">) {
-	return PROVIDERS[env.AI_PROVIDER === "openrouter" ? "openrouter" : "workers-ai"];
+	return PROVIDERS[providerIdOf(env)];
+}
+
+/**
+ * What a person reads when the gateway refuses a model call with
+ * `ai_provider_not_configured`: the selected provider's key isn't set on the
+ * gateway. Names the key and the command that sets it, and the other
+ * provider as the alternative (a different provider is a redeploy, since
+ * AI_PROVIDER is read when the Worker is built). The manifest requires
+ * OPENROUTER_API_KEY, so the gateway doesn't open the app before it is set;
+ * this is what a Worker built with the default AI_PROVIDER=workers-ai says
+ * while WORKERS_AI_API_TOKEN is missing.
+ */
+export function aiProviderNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
+	const selected = providerIdOf(env);
+	const other = selected === "openrouter" ? "workers-ai" : "openrouter";
+	const name = PROVIDERS[selected].settings[0];
+	return (
+		`The AI provider isn't set up on this gateway. An admin sets ${name} with ` +
+		`\`pnpm everyapp secret set ${name}\` (or ${PROVIDERS[other].settings[0]}, and redeploys the app with AI_PROVIDER=${other}).`
+	);
 }
 
 /**
@@ -78,12 +105,12 @@ const OPENROUTER_MODELS: Record<string, string> = {
 
 /**
  * The id to send for `model`. Upstream's code (lib/ai.ts) and AGENT_MODEL may
- * name Workers AI models; with AI_PROVIDER=openrouter they become OpenRouter's
- * ids for the same models. Any other id is sent as it is (the manifest's
+ * name Workers AI models; with AI_PROVIDER=openrouter they become
+ * OpenRouter's ids for the same models. Any other id is sent as it is (the manifest's
  * `ai.models` decides whether the gateway accepts it).
  */
 export function mapModel(env: Pick<Cloudflare.Env, "AI_PROVIDER">, model: string): string {
-	const models = env.AI_PROVIDER === "openrouter" ? OPENROUTER_MODELS : WORKERS_AI_MODELS;
+	const models = providerIdOf(env) === "openrouter" ? OPENROUTER_MODELS : WORKERS_AI_MODELS;
 	return models[model] ?? model;
 }
 
@@ -112,7 +139,9 @@ export function aiFailureOf(ai: Ai): string | undefined {
  * completion through the gateway. Never sends `stream_options` (Workers AI
  * answers 400 on a non-streaming call that carries it). Throws on any
  * failure, as a binding's `run()` does, with the gateway's refusal (code and
- * message) when the gateway refused the call.
+ * message) when the gateway refused the call, or, when the provider's key
+ * isn't set on the gateway (`ai_provider_not_configured`), the sentence that
+ * names the key to set: the agent shows it where it skips an auto-draft.
  */
 export function gatewayAi(env: Cloudflare.Env, target?: GatewayCallFor): Ai {
 	const provider = providerOf(env);
@@ -137,6 +166,7 @@ export function gatewayAi(env: Cloudflare.Env, target?: GatewayCallFor): Ai {
 				});
 				if (!res.ok) {
 					const refusal = await gatewayRefusal(res.clone());
+					if (refusal?.code === "ai_provider_not_configured") throw new Error(aiProviderNotSetUpMessage(env));
 					throw new Error(
 						refusal
 							? `ai ${res.status} ${refusal.code}: ${refusal.message}`

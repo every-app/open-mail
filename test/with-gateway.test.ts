@@ -109,7 +109,7 @@ describe("withGateway", () => {
 			"meta-llama/llama-3.1-8b-instruct",
 		);
 		expect(agentModelId(env())).toBe("@cf/meta/llama-4-scout-17b-16e-instruct");
-		expect(agentModelId(env({ AI_PROVIDER: "openrouter" }))).toBe("meta-llama/llama-4-scout");
+		expect(agentModelId(env({ AI_PROVIDER: "openrouter" }))).toBe("anthropic/claude-haiku-5.5");
 		expect(agentModelId(env({ AGENT_MODEL: " @cf/moonshotai/kimi-k2.6 " }))).toBe("@cf/moonshotai/kimi-k2.6");
 	});
 });

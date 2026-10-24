@@ -1,75 +1,45 @@
-// `pnpm check:runbook`: every gateway secret docs/EVERY_APP.md tells the
-// operator to set (`everyapp secret set NAME… --for gateway`) is one the
-// command accepts, checked with the CLI's own assertSettableSecret(), offline.
-//
-// Run from the app with tsx, it reads the runbook and runs itself again
-// through jiti from the CLI package (the pattern of scripts/policy-check.ts),
-// where the CLI's TypeScript sources and their "@/..." imports resolve:
-//
-//   cd <checkout>/packages/cli && JITI_ALIAS='{"@":"<checkout>/packages/cli/src"}' \
-//     node node_modules/jiti/lib/jiti-cli.mjs <app>/scripts/check-runbook-secrets.ts assert NAME…
-import { spawnSync } from "node:child_process";
+// `pnpm check:runbook`: every setting docs/EVERY_APP.md tells the operator to
+// set (`everyapp secret set NAME…`) is a Gateway setting the command accepts.
+// `everyapp secret set` routes each name by itself (a Gateway setting goes to
+// the Gateway Worker from any directory, any other name to the app in the
+// current directory), so a name that isn't one would be taken for an app
+// secret, and the runbook promises the app has none. The list is the SDK's
+// own (`SETTABLE_GATEWAY_SETTINGS` in `@every-app/sdk/internal`, what the
+// CLI consults), less the settings `everyapp setup` owns. Offline.
 import fs from "node:fs";
 import path from "node:path";
-
-const [mode, ...names] = process.argv.slice(2);
-
-if (mode === "assert") {
-	// Under jiti, from the CLI package.
-	const secretsFile = path.join(process.cwd(), "src/lib/gateway/secretsFile.ts");
-	const { assertSettableSecret } = (await import(secretsFile)) as {
-		assertSettableSecret: (name: string) => void;
-	};
-	let refused = 0;
-	for (const name of names) {
-		try {
-			assertSettableSecret(name);
-			console.log(`ok   ${name}: everyapp secret set --for gateway accepts it`);
-		} catch (error) {
-			refused++;
-			console.log(`FAIL ${name}: ${(error as Error).message}`);
-		}
-	}
-	process.exit(refused === 0 ? 0 : 1);
-}
+import { isInstallOwnedGatewaySetting, isSettableGatewaySetting } from "@every-app/sdk/internal";
 
 const appDir = path.resolve(import.meta.dirname, "..");
 const runbook = path.join(appDir, "docs/EVERY_APP.md");
 const text = fs.readFileSync(runbook, "utf8");
 
-// Each `everyapp secret set NAME… [--for gateway]` command, up to the end of
-// its code span, table cell or line. One without `--for gateway` would set an
-// app secret, and the runbook promises the app has none.
-const gatewaySecrets = new Set<string>();
-const appSecrets: string[] = [];
+// Each `everyapp secret set NAME…` command, up to the end of its code span,
+// table cell or line; the names are its words in capitals.
+const names = new Set<string>();
 for (const match of text.matchAll(/everyapp secret set ([^`|\n]*)/g)) {
-	const command = match[1]!;
-	const secretNames = command.split(/\s+/).filter((word) => /^[A-Z][A-Z0-9_]*$/.test(word));
-	if (/--for gateway\b/.test(command)) for (const name of secretNames) gatewaySecrets.add(name);
-	else appSecrets.push(...secretNames);
+	for (const word of match[1]!.split(/\s+/)) if (/^[A-Z][A-Z0-9_]*$/.test(word)) names.add(word);
 }
 
-if (gatewaySecrets.size === 0) {
-	console.error(`FAIL no "everyapp secret set … --for gateway" command found in ${path.relative(appDir, runbook)}`);
-	process.exit(1);
-}
-if (appSecrets.length > 0) {
-	console.error(`FAIL the runbook sets app secrets (${appSecrets.join(", ")}); the app has none`);
+if (names.size === 0) {
+	console.error(`FAIL no "everyapp secret set NAME" command found in ${path.relative(appDir, runbook)}`);
 	process.exit(1);
 }
 
-const cliDir = fs.realpathSync(path.join(appDir, "node_modules/everyapp"));
-const run = spawnSync(
-	process.execPath,
-	[path.join(cliDir, "node_modules/jiti/lib/jiti-cli.mjs"), path.join(appDir, "scripts/check-runbook-secrets.ts"), "assert", ...gatewaySecrets],
-	{
-		cwd: cliDir,
-		stdio: "inherit",
-		env: { ...process.env, JITI_ALIAS: JSON.stringify({ "@": path.join(cliDir, "src") }) },
-	},
-);
-if (run.status !== 0) {
+let refused = 0;
+for (const name of names) {
+	if (isSettableGatewaySetting(name) && !isInstallOwnedGatewaySetting(name)) {
+		console.log(`ok   ${name}: a Gateway setting everyapp secret set accepts`);
+	} else {
+		refused++;
+		const why = isInstallOwnedGatewaySetting(name)
+			? "everyapp setup owns it"
+			: "not a Gateway setting; the CLI would take it for an app secret, and the app has none";
+		console.log(`FAIL ${name}: ${why}`);
+	}
+}
+if (refused > 0) {
 	console.error("check:runbook FAILED");
 	process.exit(1);
 }
-console.log(`check:runbook OK: ${gatewaySecrets.size} gateway secrets, no app secrets (${path.relative(appDir, runbook)})`);
+console.log(`check:runbook OK: ${names.size} Gateway settings, no app secrets (${path.relative(appDir, runbook)})`);

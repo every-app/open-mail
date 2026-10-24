@@ -14,15 +14,34 @@ export default {
       { name: "EMAIL_AGENT", className: "EmailAgent" },
     ],
   },
-  // Model calls go through the gateway's AI proxy: Workers AI by default,
-  // OpenRouter with AI_PROVIDER=openrouter (workers/everyapp/gateway.ts).
-  providers: ["workers-ai", "openrouter"],
+  // Model calls go through the gateway's AI proxy (workers/everyapp/gateway.ts).
+  // The Worker picks its provider when it is built (AI_PROVIDER in
+  // cloudflare.config.ts). OpenRouter, the provider the gateway holds a key
+  // for, is required (the gateway doesn't open the app until its key is set);
+  // Workers AI is optional (a Worker built with it and no token says in the
+  // chat what is missing). The build still defaults to workers-ai until its
+  // own PR flips it, so a redeploy passes AI_PROVIDER=openrouter meanwhile.
+  // They become one any-of group once the gateway tells apps which providers
+  // are set.
+  providers: [
+    {
+      id: "openrouter",
+      why: "The inbox agent's model, with the prompt-injection scanner and the draft verifier, for a Worker deployed with AI_PROVIDER=openrouter.",
+    },
+    {
+      id: "workers-ai",
+      optional: true,
+      why: "Used by a Worker built with the default AI_PROVIDER=workers-ai instead of OpenRouter.",
+    },
+  ],
   // The model ids the gateway accepts from this app (it refuses any other
-  // with model_not_allowed). Workers AI: the agent's default and the draft
-  // verifier, the prompt-injection scanner, and kimi-k2.6 for AGENT_MODEL
-  // (paid-only, 20 requests a minute per account, shared by every
-  // organization on the gateway; the deprecated kimi-k2.5 id is sent as
-  // k2.6). OpenRouter (AI_PROVIDER=openrouter): the same three models.
+  // with model_not_allowed). Workers AI (AI_PROVIDER=workers-ai): the agent's
+  // default and the draft verifier, the prompt-injection scanner, and
+  // kimi-k2.6 for AGENT_MODEL (paid-only, 20 requests a minute per account,
+  // shared by every organization on the gateway; the deprecated kimi-k2.5 id
+  // is sent as k2.6). OpenRouter (AI_PROVIDER=openrouter): the same three,
+  // plus claude-haiku-5.5, its agent model (Scout wrote draft_reply calls
+  // out as text, which became the draft).
   ai: {
     models: [
       "@cf/meta/llama-4-scout-17b-16e-instruct",
@@ -30,6 +49,7 @@ export default {
       "@cf/moonshotai/kimi-k2.6",
       "meta-llama/llama-4-scout",
       "meta-llama/llama-3.1-8b-instruct",
+      "anthropic/claude-haiku-5.5",
       "moonshotai/kimi-k2.6",
     ],
   },

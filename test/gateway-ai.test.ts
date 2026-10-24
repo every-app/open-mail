@@ -19,7 +19,16 @@ import {
 	forMailbox,
 	skipAutoDraft,
 } from "../workers/everyapp/agent-ai";
-import { agentModelId, aiFailureOf, gatewayAi, gatewayModel, withGateway } from "../workers/everyapp/gateway";
+import {
+	agentModelId,
+	aiFailureOf,
+	aiProviderNotSetUpMessage,
+	gatewayAi,
+	gatewayModel,
+	mapModel,
+	providerIdOf,
+	withGateway,
+} from "../workers/everyapp/gateway";
 import { isPromptInjection, verifyDraft } from "../workers/lib/ai";
 import { toolDraftReply } from "../workers/lib/tools";
 import type { Env } from "../workers/types";
@@ -139,6 +148,20 @@ describe("gatewayAi(): the run() shim lib/ai.ts calls", () => {
 		expect(aiFailureOf(ai)).toBeUndefined();
 	});
 
+	it("an ai_provider_not_configured refusal becomes the sentence naming the key to set, which the auto-draft skip then shows", async () => {
+		const gateway = fakeGateway(() =>
+			refusal("ai_provider_not_configured", 503, "Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai."),
+		);
+		const ai = gatewayAi(env({ EVERY_APP_GATEWAY: gateway.binding }));
+		await expect(ai.run("@cf/meta/llama-3.1-8b-instruct-fast" as never, { messages: chat } as never)).rejects.toThrow(
+			"The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
+		);
+		// The scanner fails closed; the agent reads why and skips the draft with this sentence, not "prompt injection".
+		expect(await isPromptInjection(ai, "A perfectly normal email body.")).toBe(true);
+		expect(aiFailureOf(ai)).toBe(aiProviderNotSetUpMessage(env()));
+		expect(aiFailureOf(ai)).not.toMatch(/ai 503|ai_provider_not_configured/);
+	});
+
 	it("without a gateway or a dev key, run() fails (lib/ai.ts fails closed) and records why", async () => {
 		const ai = gatewayAi(env({ EVERYAPP_DEV: "1" }));
 		expect(await isPromptInjection(ai, "A perfectly normal email body.")).toBe(true);
@@ -150,7 +173,7 @@ describe("gatewayModel(): the agent's ai-sdk provider", () => {
 	it("calls the selected provider's path through the gateway binding with no key, and flips with AI_PROVIDER", async () => {
 		for (const [provider, path, model] of [
 			["workers-ai", "/api/ai/workers-ai/v1/chat/completions", "@cf/meta/llama-4-scout-17b-16e-instruct"],
-			["openrouter", "/api/ai/openrouter/api/v1/chat/completions", "meta-llama/llama-4-scout"],
+			["openrouter", "/api/ai/openrouter/api/v1/chat/completions", "anthropic/claude-haiku-5.5"],
 		] as const) {
 			const gateway = fakeGateway(() => completion("Hello."));
 			const e = env({ AI_PROVIDER: provider, EVERY_APP_GATEWAY: gateway.binding });
@@ -166,6 +189,18 @@ describe("gatewayModel(): the agent's ai-sdk provider", () => {
 
 	it("throws ConfigurationError without a binding or a dev key (what aiSetupProblem() reports first)", () => {
 		expect(() => gatewayModel(env({ EVERYAPP_DEV: "1" }))).toThrow(ConfigurationError);
+	});
+
+	it("Workers AI is the provider unless AI_PROVIDER says openrouter (the build default; the manifest requires OpenRouter's key, and the default flip is its own PR)", () => {
+		for (const AI_PROVIDER of [undefined, "", "workers-ai", "anything-else"]) {
+			const e = { AI_PROVIDER, AGENT_MODEL: "" } as unknown as Cloudflare.Env;
+			expect(providerIdOf(e)).toBe("workers-ai");
+			expect(agentModelId(e)).toBe("@cf/meta/llama-4-scout-17b-16e-instruct");
+			expect(mapModel(e, "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("@cf/meta/llama-3.1-8b-instruct-fast");
+		}
+		expect(providerIdOf(env({ AI_PROVIDER: "openrouter" }))).toBe("openrouter");
+		expect(agentModelId(env({ AI_PROVIDER: "openrouter" }))).toBe("anthropic/claude-haiku-5.5");
+		expect(mapModel(env({ AI_PROVIDER: "openrouter" }), "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("meta-llama/llama-3.1-8b-instruct");
 	});
 });
 
@@ -225,7 +260,7 @@ describe("the agent's streamText tool loop through the gateway", () => {
 			"/api/ai/openrouter/api/v1/chat/completions",
 			"/api/ai/openrouter/api/v1/chat/completions",
 		]);
-		expect(gateway.calls[0]!.body).toMatchObject({ model: "meta-llama/llama-4-scout", stream: true });
+		expect(gateway.calls[0]!.body).toMatchObject({ model: "anthropic/claude-haiku-5.5", stream: true });
 		expect(gateway.calls[0]!.body.tools[0].function.name).toBe("draft_reply");
 		expect(gateway.calls[1]!.body.messages.map((m: { role: string }) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
 	});
@@ -322,22 +357,41 @@ describe("what the agent says when AI fails", () => {
 		expect(aiSetupProblem(shared, { background: true, organizationId: "org-1" })).toBeNull();
 	});
 
-	it("aiFailureMessage(): ConfigurationError, a gateway refusal, a provider error", () => {
-		expect(aiFailureMessage(env(), new ConfigurationError("no key"))).toBe(aiNotSetUpMessage(env()));
-		const refused = new APICallError({
-			message: "Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai.",
+	it("aiProviderNotSetUpMessage(): the selected provider's key, the command, and the other provider as a redeploy", () => {
+		expect(aiProviderNotSetUpMessage(env())).toBe(
+			"The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
+		);
+		expect(aiProviderNotSetUpMessage(env({ AI_PROVIDER: "openrouter" }))).toBe(
+			"The AI provider isn't set up on this gateway. An admin sets OPENROUTER_API_KEY with `pnpm everyapp secret set OPENROUTER_API_KEY` (or WORKERS_AI_API_TOKEN, and redeploys the app with AI_PROVIDER=workers-ai).",
+		);
+	});
+
+	/** An ai-sdk APICallError carrying a gateway refusal, as the agent's stream sees one. */
+	function refusedCall(code: string, status: number, message: string): APICallError {
+		return new APICallError({
+			message,
 			url: "http://every-app-gateway.internal/api/ai/workers-ai/v1/chat/completions",
 			requestBodyValues: {},
-			statusCode: 503,
-			responseHeaders: { "x-everyapp-error": "ai_provider_not_configured" },
-			responseBody: JSON.stringify({
-				error: { message: "Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai.", code: "ai_provider_not_configured", type: "gateway_refusal" },
-				code: "ai_provider_not_configured",
-				message: "Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai.",
-			}),
+			statusCode: status,
+			responseHeaders: { "x-everyapp-error": code },
+			responseBody: JSON.stringify({ error: { message, code, type: "gateway_refusal" }, code, message }),
 		});
+	}
+
+	it("aiFailureMessage(): ConfigurationError, the provider not configured on the gateway, another gateway refusal, a provider error", () => {
+		expect(aiFailureMessage(env(), new ConfigurationError("no key"))).toBe(aiNotSetUpMessage(env()));
+		const notConfigured = refusedCall(
+			"ai_provider_not_configured",
+			503,
+			"Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai.",
+		);
+		expect(aiFailureMessage(env(), notConfigured)).toBe(aiProviderNotSetUpMessage(env()));
+		expect(aiFailureMessage(env({ AI_PROVIDER: "openrouter" }), notConfigured)).toBe(
+			aiProviderNotSetUpMessage(env({ AI_PROVIDER: "openrouter" })),
+		);
+		const refused = refusedCall("model_not_allowed", 403, "The app manifest does not allow this model (x); list it in ai.models.");
 		expect(aiFailureMessage(env(), refused)).toBe(
-			"The gateway refused the AI call: Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai. (ai_provider_not_configured)",
+			"The gateway refused the AI call: The app manifest does not allow this model (x); list it in ai.models. (model_not_allowed)",
 		);
 		const upstream = new APICallError({ message: "Rate limited", url: "x", requestBodyValues: {}, statusCode: 429 });
 		expect(aiFailureMessage(env(), upstream)).toBe("The AI provider answered 429: Rate limited");
@@ -380,6 +434,19 @@ describe("the chat's reply", () => {
 		expect(chunks.some((c) => c.type === "error")).toBe(false);
 		expect(shownText(chunks)).toBe(
 			"⚠️ The gateway refused the AI call: The app manifest does not allow this model (@cf/x); list it in ai.models. (model_not_allowed)",
+		);
+	});
+
+	it("chatReply(): the provider's key missing on the gateway becomes the sentence naming it, not the raw refusal", async () => {
+		const gateway = fakeGateway(() =>
+			refusal("ai_provider_not_configured", 503, "Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai."),
+		);
+		const e = env({ EVERY_APP_GATEWAY: gateway.binding });
+		const result = streamText({ model: gatewayModel(e).chatModel(agentModelId(e)), prompt: "hi", maxRetries: 0, onError: () => {} });
+		const chunks = await uiChunks(chatReply(result.toUIMessageStream({ onError: (error) => aiFailureMessage(e, error) })));
+		expect(chunks.some((c) => c.type === "error")).toBe(false);
+		expect(shownText(chunks)).toBe(
+			"⚠️ The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
 		);
 	});
 

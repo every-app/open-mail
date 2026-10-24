@@ -9,7 +9,9 @@
 # WORKERS_AI_API_TOKEN=
 # CLOUDFLARE_ACCOUNT_ID=
 #
-# Or OpenRouter: run with AI_PROVIDER=openrouter in the environment.
+# Or OpenRouter, the provider the manifest requires: run with
+# AI_PROVIDER=openrouter in the environment and a key from
+# https://openrouter.ai/settings/keys.
 # OPENROUTER_API_KEY=
 #
 # Email: the SDK checks each send against EVERYAPP_EMAIL_SENDERS and prints
