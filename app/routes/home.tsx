@@ -13,7 +13,7 @@ import {
 	Text,
 	useKumoToastManager,
 } from "@cloudflare/kumo";
-import { EnvelopeIcon, PlusIcon, TrashIcon, WarningIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, EnvelopeIcon, PlusIcon, TrashIcon, WarningIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
@@ -24,13 +24,16 @@ import {
 	useMailboxes,
 } from "~/queries/mailboxes";
 import { queryKeys } from "~/queries/keys";
+import { useDocumentTitle } from "~/hooks/useDocumentTitle";
+import { mailboxDisplayName } from "~/lib/utils";
 
 export function meta() {
-	return [{ title: "Agentic Inbox" }];
+	return [{ title: "Mailboxes · Agentic Inbox" }];
 }
 
 export default function HomeRoute() {
 	const toastManager = useKumoToastManager();
+	useDocumentTitle("Mailboxes");
 	const { data: mailboxes = [], refetch: refetchMailboxes, isFetched: mailboxesFetched } = useMailboxes();
 	const createMailbox = useCreateMailbox();
 	const deleteMailbox = useDeleteMailbox();
@@ -109,7 +112,7 @@ export default function HomeRoute() {
 		setIsCreating(true);
 		try {
 			await createMailbox.mutateAsync({ email, name });
-			toastManager.add({ title: "Mailbox created successfully!" });
+			toastManager.add({ title: "Mailbox created" });
 			setIsCreateOpen(false);
 			setNewPrefix("");
 			setNewName("");
@@ -159,6 +162,17 @@ export default function HomeRoute() {
 		<div className="min-h-screen bg-kumo-recessed">
 			<div className="mx-auto max-w-2xl px-4 py-8 md:px-6 md:py-16">
 				<div className="mb-8">
+					{/* The way back up, first on the page as in every Every App app's sidebar. */}
+					{me?.gatewayUrl && (
+						<a
+							href={me.gatewayUrl}
+							aria-label="Back to Every App"
+							className="mb-2.5 inline-flex items-center gap-1.5 text-sm text-kumo-subtle transition-colors hover:text-kumo-default"
+						>
+							<CaretLeftIcon size={14} />
+							<span>Every App</span>
+						</a>
+					)}
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
 						{canCreate && accounts.length > 0 && (
@@ -167,28 +181,13 @@ export default function HomeRoute() {
 								icon={<PlusIcon size={16} />}
 								onClick={() => setIsCreateOpen(true)}
 							>
-								New Mailbox
+								New mailbox
 							</Button>
 						)}
 					</div>
-					{domains.length > 0 && (
-						<p className="text-sm text-kumo-subtle mt-1">
-							Mailboxes are created on {domains.join(", ")}
-						</p>
-					)}
-					{me && (
-						<p className="text-xs text-kumo-subtle mt-2">
-							Signed in as {me.email} ({me.role})
-							{me.gatewayUrl && (
-								<>
-									{" · "}
-									<a href={me.gatewayUrl} className="underline hover:text-kumo-default">
-										Back to Every App
-									</a>
-								</>
-							)}
-						</p>
-					)}
+					<p className="text-sm text-kumo-subtle mt-1">
+						Shared with everyone in your organization
+					</p>
 				</div>
 
 				<SetupBanner noDomain={noDomain} sendingOff={sendingOff} isAdmin={isAdmin} />
@@ -207,17 +206,7 @@ export default function HomeRoute() {
 									idx > 0 ? "border-t border-kumo-line" : ""
 								}`}
 							>
-								<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kumo-fill text-sm font-bold text-kumo-default">
-									{account.name.charAt(0).toUpperCase()}
-								</div>
-								<div className="min-w-0 flex-1">
-									<div className="text-sm font-medium text-kumo-default truncate">
-										{account.name}
-									</div>
-									<div className="text-sm text-kumo-subtle">
-										{account.email}
-									</div>
-								</div>
+								<MailboxIdentity id={account.id} email={account.email} name={account.name} />
 								{canManage && (
 									<Button
 										variant="ghost"
@@ -258,10 +247,10 @@ export default function HomeRoute() {
 									: noDomain
 										? isAdmin
 											? "Allow a mail domain first (above), then create a mailbox on it."
-											: "Ask an owner or admin of your organization to finish email setup."
+											: "Ask an owner or admin to finish email setup."
 										: isAdmin
 											? "Create a mailbox to start sending and receiving emails with your domain."
-											: "Ask an owner or admin of your organization to create a mailbox."}
+											: "Ask an owner or admin to create a mailbox."}
 							</p>
 							{canCreate && (
 								<Button
@@ -269,7 +258,7 @@ export default function HomeRoute() {
 									icon={<PlusIcon size={16} />}
 									onClick={() => setIsCreateOpen(true)}
 								>
-									Create Mailbox
+									New mailbox
 								</Button>
 							)}
 						</div>
@@ -281,7 +270,7 @@ export default function HomeRoute() {
 			<Dialog.Root open={isCreateOpen} onOpenChange={setIsCreateOpen}>
 				<Dialog size="sm" className="p-6">
 					<Dialog.Title className="text-base font-semibold mb-5">
-						Create New Mailbox
+						New mailbox
 					</Dialog.Title>
 					<form onSubmit={handleCreate} className="space-y-4">
 						{createError && (
@@ -291,7 +280,7 @@ export default function HomeRoute() {
 						)}
 						<div>
 							<span className="text-sm font-medium text-kumo-default mb-1.5 block">
-								Email Address
+								Address
 							</span>
 							<div className="flex items-center gap-2">
 								<div className="flex-1">
@@ -329,7 +318,7 @@ export default function HomeRoute() {
 							</div>
 						</div>
 						<Input
-							label="Display Name (optional)"
+							label="Sender name (optional)"
 							placeholder="Info"
 							size="sm"
 							value={newName}
@@ -367,14 +356,14 @@ export default function HomeRoute() {
 			>
 				<Dialog size="sm" className="p-6">
 					<Dialog.Title className="text-base font-semibold mb-2">
-						Delete Mailbox
+						Delete mailbox
 					</Dialog.Title>
 					<Dialog.Description className="text-kumo-subtle text-sm mb-5">
-						Are you sure you want to delete{" "}
+						Delete{" "}
 						<strong className="text-kumo-default">
 							{mailboxToDelete?.email}
 						</strong>
-						? This action cannot be undone.
+						?
 					</Dialog.Description>
 					<div className="flex justify-end gap-2">
 						<Dialog.Close
@@ -396,6 +385,33 @@ export default function HomeRoute() {
 				</Dialog>
 			</Dialog.Root>
 		</div>
+	);
+}
+
+/**
+ * A row's avatar, name and address, from the list alone: the name the API
+ * lists (the display name given at creation, else the local part of the
+ * address). The sender name set later in Settings travels with the mailbox,
+ * not the list, so it shows on the mailbox page. When the name would be the
+ * address itself, the address shows once.
+ */
+function MailboxIdentity({ id, email, name }: { id: string; email: string; name: string }) {
+	const displayName = mailboxDisplayName({ email, name }, id);
+	const sameAsAddress = displayName === email;
+	return (
+		<>
+			<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-kumo-fill text-sm font-bold text-kumo-default">
+				{displayName.charAt(0).toUpperCase()}
+			</div>
+			<div className="min-w-0 flex-1">
+				<div className="text-sm font-medium text-kumo-default truncate">
+					{sameAsAddress ? email : displayName}
+				</div>
+				{!sameAsAddress && (
+					<div className="text-sm text-kumo-subtle">{email}</div>
+				)}
+			</div>
+		</>
 	);
 }
 

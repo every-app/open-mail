@@ -5,10 +5,10 @@
 import { Button, Tooltip } from "@cloudflare/kumo";
 import { useEffect, useRef, useState } from "react";
 import {
+	ArrowBendDoubleUpLeftIcon,
 	ArrowBendUpLeftIcon,
 	ArrowBendUpRightIcon,
 	ArrowLeftIcon,
-	ChatCircleIcon,
 	CodeIcon,
 	EnvelopeOpenIcon,
 	EnvelopeSimpleIcon,
@@ -103,14 +103,14 @@ export default function EmailPanelToolbar({
 							aria-label="Reply"
 						/>
 					</Tooltip>
-					<Tooltip content="Reply All" side="bottom" asChild>
+					<Tooltip content="Reply all" side="bottom" asChild>
 						<Button
 							variant="ghost"
 							shape="square"
 							size="sm"
-							icon={<ChatCircleIcon size={18} />}
+							icon={<ArrowBendDoubleUpLeftIcon size={18} />}
 							onClick={onReplyAll}
-							aria-label="Reply All"
+							aria-label="Reply all"
 						/>
 					</Tooltip>
 					<Tooltip content="Forward" side="bottom" asChild>
@@ -145,28 +145,28 @@ export default function EmailPanelToolbar({
 				/>
 			</Tooltip>
 
-			<Tooltip content={email.read ? "Mark as unread" : "Mark as read"} side="bottom" asChild>
+			<Tooltip content={email.read ? "Mark unread" : "Mark read"} side="bottom" asChild>
 				<Button
 					variant="ghost"
 					shape="square"
 					size="sm"
 					icon={email.read ? <EnvelopeSimpleIcon size={18} /> : <EnvelopeOpenIcon size={18} />}
 					onClick={onToggleRead}
-					aria-label={email.read ? "Mark as unread" : "Mark as read"}
+					aria-label={email.read ? "Mark unread" : "Mark read"}
 				/>
 			</Tooltip>
 
 			<MoveToFolderMenu folders={moveToFolders} onMove={onMove} />
 
 			<div className="ml-auto flex items-center gap-0.5">
-				<Tooltip content="View source" side="bottom" asChild>
+				<Tooltip content="Headers" side="bottom" asChild>
 					<Button
 						variant="ghost"
 						shape="square"
 						size="sm"
 						icon={<CodeIcon size={18} />}
 						onClick={onViewSource}
-						aria-label="View source"
+						aria-label="Headers"
 					/>
 				</Tooltip>
 				<Tooltip content="Delete" side="bottom" asChild>

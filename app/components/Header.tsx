@@ -78,7 +78,7 @@ export default function Header() {
 					<Input
 						className="w-full"
 						aria-label="Search emails"
-						placeholder="Search emails... (try from:name, is:unread, has:attachment)"
+						placeholder="Search"
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
 						onKeyDown={handleKeyDown}
@@ -129,7 +129,7 @@ export default function Header() {
 						className="hidden lg:inline-flex"
 					/>
 				</Tooltip>
-				<Tooltip content="Settings" side="bottom" asChild>
+				<Tooltip content="Mailbox settings" side="bottom" asChild>
 					<Button
 						variant={isSettingsActive ? "secondary" : "ghost"}
 						shape="square"
@@ -141,7 +141,7 @@ export default function Header() {
 									: `/mailbox/${mailboxId}/settings`,
 							)
 						}
-						aria-label="Settings"
+						aria-label="Mailbox settings"
 					/>
 				</Tooltip>
 			</div>

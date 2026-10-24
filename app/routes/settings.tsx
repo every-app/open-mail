@@ -9,10 +9,12 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 import { meQuery } from "~/services/api";
+import { useDocumentTitle } from "~/hooks/useDocumentTitle";
+import { mailboxDisplayName } from "~/lib/utils";
 
-// Placeholder shown in the textarea when no custom prompt is set.
-// The authoritative default prompt lives in workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
-const PROMPT_PLACEHOLDER = `You are an email assistant that helps manage this inbox. You read emails, draft replies, and help organize conversations.\n\nWrite like a real person. Short, direct, flowing prose. Plain text only.\n\n(Leave empty to use the full built-in default prompt)`;
+// An example shown in the empty textarea. The default instructions live in
+// workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
+const PROMPT_PLACEHOLDER = "Reply as the Acme support team. Keep it to three sentences. Never quote prices.";
 
 export default function SettingsRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
@@ -26,6 +28,7 @@ export default function SettingsRoute() {
 	const { data: me } = useQuery(meQuery);
 	const isAdmin = me?.role === "owner" || me?.role === "admin";
 	const readOnly = me !== undefined && !isAdmin;
+	useDocumentTitle("Settings", mailboxDisplayName(mailbox, mailboxId));
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
@@ -48,7 +51,7 @@ export default function SettingsRoute() {
 		};
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
-			toastManager.add({ title: "Settings saved!" });
+			toastManager.add({ title: "Settings saved" });
 		} catch (err: unknown) {
 			const message = (err instanceof Error ? err.message : null) || "Failed to save settings";
 			toastManager.add({ title: message, variant: "error" });
@@ -74,7 +77,7 @@ export default function SettingsRoute() {
 	return (
 		<div className="max-w-2xl px-4 py-4 md:px-8 md:py-6 h-full overflow-y-auto">
 			<div className="mb-6">
-				<h1 className="text-lg font-semibold text-kumo-default">Settings</h1>
+				<h1 className="text-lg font-semibold text-kumo-default">Mailbox settings</h1>
 				{readOnly && (
 					<p className="text-sm text-kumo-subtle mt-1">
 						Only owners and admins can change a mailbox's settings.
@@ -105,7 +108,7 @@ export default function SettingsRoute() {
 						<div className="flex items-center gap-2">
 							<RobotIcon size={16} weight="duotone" className="text-kumo-subtle" />
 							<span className="text-sm font-medium text-kumo-default">
-								AI Agent Prompt
+								Agent instructions
 							</span>
 							{isCustomPrompt ? (
 								<Badge variant="primary">Custom</Badge>
@@ -125,8 +128,7 @@ export default function SettingsRoute() {
 						)}
 					</div>
 					<p className="text-xs text-kumo-subtle mb-3">
-						Customize how the AI agent behaves for this mailbox.
-						Leave empty to use the built-in default prompt.
+						How the agent writes and behaves for this mailbox. Leave empty for the default.
 					</p>
 					<textarea
 						value={agentPrompt}
@@ -136,17 +138,13 @@ export default function SettingsRoute() {
 						disabled={readOnly}
 						className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring font-mono leading-relaxed"
 					/>
-					<p className="text-xs text-kumo-subtle mt-2">
-						The prompt is sent as the system message to the AI model.
-						It controls the agent's personality, writing style, and behavior rules.
-					</p>
 				</div>
 
 				{/* Save */}
 				{!readOnly && (
 					<div className="flex justify-end">
 						<Button variant="primary" onClick={handleSave} loading={isSaving}>
-							Save Changes
+							Save
 						</Button>
 					</div>
 				)}

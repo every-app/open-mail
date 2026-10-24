@@ -55,7 +55,7 @@ export default function MailboxRoute() {
 						description="It may have been deleted, or the address in this link is wrong."
 						contents={
 							<Button variant="primary" size="sm" onClick={() => navigate("/")}>
-								Back to Mailboxes
+								Back to mailboxes
 							</Button>
 						}
 					/>

@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Loader, Tooltip } from "@cloudflare/kumo";
+import { Button, Loader, Tooltip } from "@cloudflare/kumo";
 import {
 	ArrowUpIcon,
 	RobotIcon,
@@ -126,7 +126,7 @@ function DraftActions({
 				onClick={onEdit}
 				disabled={disabled}
 			>
-				Edit & send in composer
+				Edit and send
 			</Button>
 		</div>
 	);
@@ -348,7 +348,7 @@ function AgentChatConnected({
 	const suggestedPrompts = [
 		"Show me the latest inbox emails",
 		"Any unread emails?",
-		"Draft a response to the latest email",
+		"Draft a reply to the latest email",
 	];
 
 	return (
@@ -356,9 +356,8 @@ function AgentChatConnected({
 			{/* Header */}
 			<div className="flex items-center justify-between px-3 py-1.5 border-b border-kumo-line shrink-0">
 				<div className="flex items-center gap-2">
-					<Badge variant="beta">AI</Badge>
 					<span className="text-xs text-kumo-subtle">
-						Email Agent
+						Email agent
 					</span>
 				</div>
 				<div className="flex items-center gap-1">
@@ -371,7 +370,7 @@ function AgentChatConnected({
 								size="sm"
 								icon={<TrashIcon size={14} />}
 								onClick={() => {
-									if (window.confirm("Clear chat history?")) {
+									if (window.confirm("Clear the chat for everyone?")) {
 										setMessages([]);
 									}
 								}}
@@ -394,8 +393,7 @@ function AgentChatConnected({
 							/>
 						</div>
 						<p className="text-xs text-kumo-subtle text-center leading-relaxed px-4">
-							I can read emails, search conversations, and draft
-							replies.
+							I draft a reply to each new email in Drafts. Ask me to read, search, or draft anything else.
 						</p>
 						<div className="flex flex-col gap-1.5 w-full">
 							{suggestedPrompts.map((prompt) => (
@@ -489,7 +487,7 @@ function AgentChatConnected({
 							icon={<StopIcon size={14} weight="fill" />}
 							onClick={() => stop()}
 						>
-							Stop generating
+							Stop
 						</Button>
 					</div>
 				) : (
@@ -501,7 +499,7 @@ function AgentChatConnected({
 							value={inputValue}
 							onChange={(e) => setInputValue(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder="Ask your email agent..."
+							placeholder="Ask the agent"
 							rows={1}
 							aria-label="Chat message input"
 							className="flex-1 resize-none rounded-lg border border-kumo-line bg-kumo-control px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring min-h-[36px] max-h-[100px]"

@@ -67,13 +67,13 @@ export default function ComposeEmail() {
 								onClick={() => setShowCcBcc(true)}
 								className="shrink-0 text-xs text-kumo-link hover:text-kumo-link-hover font-medium mt-5"
 							>
-								CC / BCC
+								Cc/Bcc
 							</button>
 						)}
 					</div>
 					{showCcBcc && (
 						<Input
-							label="CC"
+							label="Cc"
 							type="text"
 							size="sm"
 							value={cc}
@@ -83,7 +83,7 @@ export default function ComposeEmail() {
 					)}
 					{showCcBcc && (
 						<Input
-							label="BCC"
+							label="Bcc"
 							type="text"
 							size="sm"
 							value={bcc}
@@ -114,7 +114,7 @@ export default function ComposeEmail() {
 							onClick={closeComposeModal}
 							disabled={isSending}
 						>
-							Discard
+							Cancel
 						</Button>
 						<div className="flex items-center gap-2">
 							<Button
@@ -126,7 +126,7 @@ export default function ComposeEmail() {
 								icon={<FloppyDiskIcon size={14} />}
 								onClick={handleSaveDraft}
 							>
-								{isSavingDraft ? "Saving..." : "Save as Draft"}
+								{isSavingDraft ? "Saving..." : "Save draft"}
 							</Button>
 							<Button
 								type="submit"

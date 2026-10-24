@@ -22,7 +22,7 @@ import { useParams } from "react-router";
 import { Folders } from "shared/folders";
 import { formatListDate } from "shared/dates";
 import MailboxSplitView from "~/components/MailboxSplitView";
-import { getSnippetText } from "~/lib/utils";
+import { getSnippetText, mailboxDisplayName } from "~/lib/utils";
 import {
 	useDeleteEmail,
 	useEmails,
@@ -33,6 +33,7 @@ import { useFolders } from "~/queries/folders";
 import { queryKeys } from "~/queries/keys";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import { useDocumentTitle } from "~/hooks/useDocumentTitle";
 import type { Email } from "~/types";
 
 const PAGE_SIZE = 25;
@@ -49,7 +50,7 @@ const FOLDER_EMPTY_STATES: Record<
 > = {
 	[Folders.INBOX]: {
 		icon: <TrayIcon size={48} weight="thin" className="text-kumo-subtle" />,
-		title: "Your inbox is empty",
+		title: "Inbox is empty",
 		description: (address) =>
 			`Mail sent to ${address} lands here, and the agent drafts a reply for you in Drafts.`,
 		showCompose: true,
@@ -79,7 +80,7 @@ const FOLDER_EMPTY_STATES: Record<
 		icon: <TrashIcon size={48} weight="thin" className="text-kumo-subtle" />,
 		title: "Trash is empty",
 		description:
-			"Deleted emails will appear here. You can restore them or permanently delete them.",
+			"Move emails here to set them aside. Delete removes them for good.",
 	},
 	[Folders.SPAM]: {
 		icon: (
@@ -201,6 +202,7 @@ export default function EmailListRoute() {
 		if (found) return found.name;
 		return folder ? folder.charAt(0).toUpperCase() + folder.slice(1) : "Inbox";
 	}, [folders, folder]);
+	useDocumentTitle(folderName, mailboxDisplayName(mailbox, mailboxId));
 
 	const isPanelOpen = selectedEmailId !== null || isComposing;
 
@@ -232,7 +234,7 @@ export default function EmailListRoute() {
 		e.preventDefault();
 		e.stopPropagation();
 		if (mailboxId) {
-			const confirmed = window.confirm("Are you sure you want to delete this email?");
+			const confirmed = window.confirm("Delete this email? This can't be undone.");
 			if (!confirmed) return;
 			deleteEmail.mutate({ mailboxId, id: emailId });
 			if (selectedEmailId === emailId) closePanel();
@@ -274,15 +276,28 @@ export default function EmailListRoute() {
 		}
 	};
 
+	// The row's first line: who the conversation is with, by local part. The
+	// mailbox's own address is left out (it is in every thread); Sent and
+	// Drafts name the recipient, since there the sender is always the mailbox.
+	const selfAddress = (mailbox?.email ?? mailboxId ?? "").toLowerCase();
+	const localParts = (addresses: string, withoutSelf: boolean): string[] =>
+		addresses
+			.split(",")
+			.map((p) => p.trim())
+			.filter((p) => p && !(withoutSelf && p.toLowerCase() === selfAddress))
+			.map((p) => p.split("@")[0])
+			.filter((name, idx, arr) => arr.indexOf(name) === idx);
+	const joinNames = (names: string[]): string =>
+		names.length <= 3
+			? names.join(", ")
+			: `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
 	const formatParticipants = (email: Email): string => {
-		if (email.participants) {
-			const names = email.participants
-				.split(",")
-				.map((p) => p.trim().split("@")[0])
-				.filter((name, idx, arr) => arr.indexOf(name) === idx);
-			if (names.length <= 3) return names.join(", ");
-			return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+		if (folder === Folders.SENT || folder === Folders.DRAFT) {
+			const names = localParts(email.recipient || "", false);
+			if (names.length > 0) return `To: ${joinNames(names)}`;
 		}
+		const names = localParts(email.participants || "", true);
+		if (names.length > 0) return joinNames(names);
 		return email.sender.split("@")[0];
 	};
 

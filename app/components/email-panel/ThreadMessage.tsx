@@ -25,6 +25,8 @@ interface ThreadMessageProps {
 	email: Email;
 	mailboxId?: string;
 	mailboxEmail?: string;
+	/** What the mailbox is called, for messages it sent (the sidebar's name). */
+	mailboxName?: string;
 	isLast: boolean;
 	isDraft?: boolean;
 	isSending?: boolean;
@@ -63,6 +65,7 @@ export default function ThreadMessage({
 	email,
 	mailboxId,
 	mailboxEmail,
+	mailboxName,
 	isLast,
 	isDraft,
 	isSending,
@@ -76,7 +79,7 @@ export default function ThreadMessage({
 }: ThreadMessageProps) {
 	const isSelf = email.sender === mailboxEmail;
 	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
-	const senderLabel = isDraft ? "Draft reply" : isSelf ? "You" : email.sender;
+	const senderLabel = isDraft ? "Draft reply" : isSelf ? mailboxName || email.sender : email.sender;
 
 	if (!isExpanded) {
 		return (
@@ -136,14 +139,14 @@ export default function ThreadMessage({
 							{formatShortDate(email.date)}
 						</span>
 						{onViewSource && (
-							<Tooltip content="View source" side="bottom" asChild>
+							<Tooltip content="Headers" side="bottom" asChild>
 								<Button
 									variant="ghost"
 									shape="square"
 									size="sm"
 									icon={<CodeIcon size={14} />}
 									onClick={onViewSource}
-									aria-label="View source"
+									aria-label="Headers"
 									className="transition-opacity !h-6 !w-6"
 								/>
 							</Tooltip>

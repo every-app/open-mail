@@ -69,7 +69,7 @@ export default function AgentSidebar() {
 					}`}
 				>
 					<PlugsIcon size={14} weight={activeTab === "mcp" ? "fill" : "regular"} />
-					MCP
+					AI clients
 				</button>
 			</div>
 

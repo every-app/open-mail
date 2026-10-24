@@ -38,7 +38,7 @@ const REFUSAL_MESSAGES: Record<string, string> = {
 	capability_not_requested:
 		"This app isn't allowed to send email on this gateway (its manifest doesn't request the email capability).",
 	integration_read_only: "This connection is read only; it can't send email.",
-	admin_required: "Only the organization's owners and admins can do this.",
+	admin_required: "Only owners and admins can do this.",
 	unauthenticated: "Your session has ended. Reload the page to sign in again.",
 };
 

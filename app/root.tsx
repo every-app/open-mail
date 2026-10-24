@@ -128,7 +128,7 @@ export default function App() {
 
 export function ErrorBoundary({ error }: { error: unknown }) {
 	let title = "Something went wrong";
-	let description = "An unexpected error occurred. Please try again.";
+	let description: string | undefined;
 
 	if (isRouteErrorResponse(error)) {
 		if (error.status === 404) {
@@ -156,7 +156,7 @@ export function ErrorBoundary({ error }: { error: unknown }) {
 							window.location.href = "/";
 						}}
 					>
-						Go Home
+						Back to mailboxes
 					</Button>
 				}
 			/>

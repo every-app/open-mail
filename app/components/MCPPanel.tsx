@@ -27,7 +27,7 @@ function CopyButton({ text }: { text: string }) {
 	};
 
 	return (
-		<Tooltip content={copied ? "Copied!" : "Copy"} asChild>
+		<Tooltip content={copied ? "Copied" : "Copy"} asChild>
 			<Button
 				variant="ghost"
 				shape="square"
@@ -53,7 +53,7 @@ function CopyButton({ text }: { text: string }) {
  * list in step with the catalog.
  */
 export const MCP_TOOLS = [
-	{ name: "list_mailboxes", desc: "List the organization's mailboxes" },
+	{ name: "list_mailboxes", desc: "List mailboxes" },
 	{ name: "list_emails", desc: "List emails in a folder" },
 	{ name: "get_email", desc: "Read a full email with body" },
 	{ name: "get_thread", desc: "Load a conversation thread" },
@@ -66,9 +66,6 @@ export const MCP_TOOLS = [
 	{ name: "mark_email_read", desc: "Mark email as read/unread" },
 	{ name: "move_email", desc: "Move email to a folder" },
 ] as const;
-
-/** The app's id: the gateway's connector prefixes each tool name with it. */
-const APP_ID = "agentic-inbox";
 
 function UrlField({ label, url }: { label: string; url: string }) {
 	return (
@@ -122,17 +119,13 @@ export default function MCPPanel() {
 						</div>
 						<div>
 							<h3 className="text-sm font-semibold text-kumo-default">
-								Connect via MCP
+								Connect an AI client
 							</h3>
-							<p className="text-xs text-kumo-subtle">
-								Model Context Protocol, through your Every App gateway
-							</p>
 						</div>
 					</div>
 					<p className="text-xs text-kumo-subtle leading-relaxed">
-						AI assistants (Claude, Cursor, ChatGPT…) can read, search,
-						draft and send from your organization's mailboxes. Your
-						gateway serves the tools, and every call acts as you.
+						A connected assistant can read, search, draft and send from
+						this organization's mailboxes, as you.
 					</p>
 				</div>
 
@@ -141,9 +134,7 @@ export default function MCPPanel() {
 					<div className="space-y-1">
 						<UrlField label="Every App connector" url={gatewayMcpUrl} />
 						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-							One connector for every app you use on this gateway.
-							Your MCP client signs in through the gateway, or
-							sends a personal access token.
+							One address for all your apps.
 						</p>
 					</div>
 				)}
@@ -219,11 +210,8 @@ export default function MCPPanel() {
 						))}
 					</div>
 					<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-						Drafting tools only save drafts; the send tools send at
-						once, as you. On the Every App connector the names start
-						with <code className="font-mono">{APP_ID}_</code>.
-						Deleting email isn't offered to AI clients until the
-						gateway supports approvals.
+						Draft tools never send. Send tools send at once, as you. No
+						tool deletes email.
 					</p>
 				</div>
 			</div>

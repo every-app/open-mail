@@ -73,7 +73,7 @@ export default function EmailPanelDialogs({
 			>
 				<Dialog size="lg">
 					<Dialog.Title>
-						Email Source Headers
+						Headers
 						{sourceViewEmail && (
 							<span className="text-sm font-normal text-kumo-subtle ml-2">
 								{sourceViewEmail.subject}
@@ -143,7 +143,7 @@ export default function EmailPanelDialogs({
 								}
 							}}
 						>
-							Download Original
+							Download
 						</Button>
 						<Dialog.Close>
 							<Button variant="primary" size="sm">

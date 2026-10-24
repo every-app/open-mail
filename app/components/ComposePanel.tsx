@@ -85,7 +85,7 @@ export default function ComposePanel() {
 										onClick={() => setShowCcBcc(true)}
 										className="shrink-0 text-xs text-kumo-link hover:text-kumo-link-hover font-medium"
 									>
-										CC / BCC
+										Cc/Bcc
 									</button>
 								)}
 							</div>
@@ -94,7 +94,7 @@ export default function ComposePanel() {
 						{showCcBcc && (
 							<div className="flex items-center gap-2">
 								<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-									CC
+									Cc
 								</label>
 								<div className="flex-1">
 									<Input
@@ -111,7 +111,7 @@ export default function ComposePanel() {
 						{showCcBcc && (
 							<div className="flex items-center gap-2">
 								<label className="text-sm font-medium text-kumo-subtle w-14 shrink-0">
-									BCC
+									Bcc
 								</label>
 								<div className="flex-1">
 									<Input
@@ -154,7 +154,7 @@ export default function ComposePanel() {
 				<div className="mt-auto px-4 py-3 border-t border-kumo-line bg-kumo-fill/30 shrink-0 md:px-6">
 					<div className="flex items-center justify-between">
 						<Button type="button" variant="ghost" size="sm" onClick={closeCompose} disabled={isSending}>
-							Discard
+							Cancel
 						</Button>
 						<div className="flex items-center gap-2">
 							<Button
@@ -166,7 +166,7 @@ export default function ComposePanel() {
 								icon={<FloppyDiskIcon size={14} />}
 								onClick={handleSaveDraft}
 							>
-								{isSavingDraft ? "Saving..." : "Save as Draft"}
+								{isSavingDraft ? "Saving..." : "Save draft"}
 							</Button>
 							<Button
 								type="submit"

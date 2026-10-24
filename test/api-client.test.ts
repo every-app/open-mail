@@ -91,7 +91,7 @@ describe("send refusals", () => {
 		respond(403, { error: "forbidden", code: "admin_required" });
 		const error = await refusal(api.createMailbox("new@example.com", "new"));
 		expect(error.code).toBe("admin_required");
-		expect(error.message).toBe("Only the organization's owners and admins can do this.");
+		expect(error.message).toBe("Only owners and admins can do this.");
 	});
 });
 

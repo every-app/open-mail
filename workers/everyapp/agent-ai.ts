@@ -176,7 +176,7 @@ export async function skipAutoDraft(
 	reason: string,
 ): Promise<{ status: "skipped"; reason: string }> {
 	console.warn(`Skipping auto-draft for ${email.emailId}: ${reason}`);
-	const trigger = `[Auto-triggered] New email from ${email.sender}: "${email.subject}"`;
+	const trigger = `New email from ${email.sender}: "${email.subject}"`;
 	const note = `⚠️ No draft for this email: ${reason}`;
 	await agent.persistMessages([
 		...agent.messages,

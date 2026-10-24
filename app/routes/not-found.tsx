@@ -18,7 +18,7 @@ export default function NotFoundRoute() {
 					description="The page you're looking for doesn't exist or has been moved."
 					contents={
 						<Button variant="primary" size="sm" onClick={() => navigate("/")}>
-							Go Home
+							Back to mailboxes
 						</Button>
 					}
 				/>

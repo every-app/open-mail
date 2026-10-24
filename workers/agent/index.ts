@@ -368,9 +368,9 @@ export class EmailAgent extends AIChatAgent<any> {
 						{
 							id: crypto.randomUUID(),
 							role: "user" as const,
-							content: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"`,
+							content: `New email from ${emailData.sender}: "${emailData.subject}"`,
 							createdAt: new Date(),
-							parts: [{ type: "text" as const, text: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"` }],
+							parts: [{ type: "text" as const, text: `New email from ${emailData.sender}: "${emailData.subject}"` }],
 						},
 						{
 							id: crypto.randomUUID(),
@@ -416,9 +416,9 @@ export class EmailAgent extends AIChatAgent<any> {
 						{
 							id: crypto.randomUUID(),
 							role: "user" as const,
-							content: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"`,
+							content: `New email from ${emailData.sender}: "${emailData.subject}"`,
 							createdAt: new Date(),
-							parts: [{ type: "text" as const, text: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"` }],
+							parts: [{ type: "text" as const, text: `New email from ${emailData.sender}: "${emailData.subject}"` }],
 						},
 						{
 							id: crypto.randomUUID(),
@@ -535,12 +535,12 @@ Based on the email content and thread context above, draft a reply using draft_r
 				{
 					id: crypto.randomUUID(),
 					role: "user" as const,
-					content: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"`,
+					content: `New email from ${emailData.sender}: "${emailData.subject}"`,
 					createdAt: new Date(),
 					parts: [
 						{
 							type: "text" as const,
-							text: `[Auto-triggered] New email from ${emailData.sender}: "${emailData.subject}"`,
+							text: `New email from ${emailData.sender}: "${emailData.subject}"`,
 						},
 					],
 				},

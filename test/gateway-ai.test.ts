@@ -491,7 +491,7 @@ describe("skipAutoDraft()", () => {
 		expect(out).toEqual({ status: "skipped", reason: aiNotSetUpMessage(env()) });
 		expect(persisted).toHaveLength(1);
 		expect(persisted[0]).toMatchObject([
-			{ role: "user", parts: [{ type: "text", text: '[Auto-triggered] New email from alice@example.org: "Lunch"' }] },
+			{ role: "user", parts: [{ type: "text", text: 'New email from alice@example.org: "Lunch"' }] },
 			{ role: "assistant", parts: [{ type: "text", text: `⚠️ No draft for this email: ${aiNotSetUpMessage(env())}` }] },
 		]);
 	});

@@ -11,6 +11,7 @@ import {
 	PaperPlaneTiltIcon,
 	PencilSimpleIcon,
 	PlusIcon,
+	ProhibitIcon,
 	TrashIcon,
 	TrayIcon,
 } from "@phosphor-icons/react";
@@ -19,6 +20,7 @@ import { NavLink, useNavigate, useParams } from "react-router";
 import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
 import { useCreateFolder, useFolders } from "~/queries/folders";
 import { useMailbox } from "~/queries/mailboxes";
+import { mailboxDisplayName } from "~/lib/utils";
 import { useUIStore } from "~/hooks/useUIStore";
 
 const FOLDER_ICONS: Record<string, React.ReactNode> = {
@@ -27,6 +29,7 @@ const FOLDER_ICONS: Record<string, React.ReactNode> = {
 	[Folders.DRAFT]: <FileIcon size={18} weight="regular" />,
 	[Folders.ARCHIVE]: <ArchiveIcon size={18} weight="regular" />,
 	[Folders.TRASH]: <TrashIcon size={18} weight="regular" />,
+	[Folders.SPAM]: <ProhibitIcon size={18} weight="regular" />,
 };
 
 const SYSTEM_FOLDER_LINKS = [
@@ -35,6 +38,7 @@ const SYSTEM_FOLDER_LINKS = [
 	{ id: Folders.DRAFT, label: "Drafts" },
 	{ id: Folders.ARCHIVE, label: "Archive" },
 	{ id: Folders.TRASH, label: "Trash" },
+	{ id: Folders.SPAM, label: "Spam" },
 ];
 
 interface FolderLinkProps {
@@ -103,17 +107,10 @@ export default function Sidebar() {
 		}
 	};
 
-	const displayName = useMemo(() => {
-		if (!currentMailbox) return mailboxId?.split("@")[0] || "Mailbox";
-		// Prefer settings.fromName > name > local part of email
-		if (currentMailbox.settings?.fromName) {
-			return currentMailbox.settings.fromName;
-		}
-		if (currentMailbox.name && currentMailbox.name !== currentMailbox.email) {
-			return currentMailbox.name;
-		}
-		return currentMailbox.email.split("@")[0] || currentMailbox.name;
-	}, [currentMailbox, mailboxId]);
+	const displayName = useMemo(
+		() => mailboxDisplayName(currentMailbox, mailboxId),
+		[currentMailbox, mailboxId],
+	);
 
 	const handleNavClick = () => {
 		// Close mobile sidebar on navigation
@@ -184,7 +181,7 @@ export default function Sidebar() {
 									size="sm"
 									icon={<PlusIcon size={16} />}
 									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="Create new folder"
+									aria-label="New folder"
 								/>
 							</Tooltip>
 						</div>
@@ -215,7 +212,7 @@ export default function Sidebar() {
 									size="sm"
 									icon={<PlusIcon size={16} />}
 									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="Create new folder"
+									aria-label="New folder"
 								/>
 							</Tooltip>
 						</div>
@@ -230,7 +227,7 @@ export default function Sidebar() {
 			>
 				<Dialog size="sm" className="p-6">
 					<Dialog.Title className="text-base font-semibold mb-4">
-						Create folder
+						New folder
 					</Dialog.Title>
 					<form onSubmit={handleCreateFolder} className="space-y-4">
 						<Input

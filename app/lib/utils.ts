@@ -12,7 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import DOMPurify from "dompurify";
 import { formatQuotedDate } from "shared/dates";
 import api from "~/services/api";
-import type { Attachment } from "~/types";
+import type { Attachment, Mailbox } from "~/types";
 
 export {
 	formatListDate,
@@ -352,4 +352,19 @@ export function downloadFile(url: string, filename: string) {
 	document.body.appendChild(link);
 	link.click();
 	document.body.removeChild(link);
+}
+
+/**
+ * What a mailbox is called wherever the app names it: the sender name from
+ * Settings, else the name it was created with, else the local part of its
+ * address, as typed. Before the mailbox loads, the local part of its id.
+ */
+export function mailboxDisplayName(
+	mailbox: Pick<Mailbox, "email" | "name" | "settings"> | undefined,
+	mailboxId?: string,
+): string {
+	if (!mailbox) return mailboxId?.split("@")[0] || "Mailbox";
+	if (mailbox.settings?.fromName) return mailbox.settings.fromName;
+	if (mailbox.name && mailbox.name !== mailbox.email) return mailbox.name;
+	return mailbox.email.split("@")[0] || mailbox.name;
 }
