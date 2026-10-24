@@ -20,7 +20,7 @@ In short, with a gateway installed (`pnpm everyapp setup` in the Every App check
 
 1. **OpenRouter**: `pnpm everyapp secret set OPENROUTER_API_KEY` (a key from https://openrouter.ai/settings/keys). The manifest requires it: the gateway doesn't open the app until it is set. Deploy with `AI_PROVIDER=openrouter` to use it; the build still defaults to Workers AI (`pnpm everyapp secret set WORKERS_AI_API_TOKEN`, optional in the manifest) until its own PR flips the default.
 2. **Your mail domain**: onboard it to Email Sending (its zone on Cloudflare DNS in the gateway's account).
-3. **Deploy**: `pnpm install && pnpm everyapp deploy`, from this directory. It uploads the Worker `every-<orgKey>-agentic-inbox`.
+3. **Deploy**: from your Every App checkout, `pnpm everyapp install https://github.com/every-app/agentic-inbox` (the latest release, which the Release workflow publishes on every push; the same command updates it later), or to deploy your own changes, that checkout's CLI from this directory: `node ../every-app/packages/cli/bin/everyapp.js deploy`. Either uploads the Worker `every-<orgKey>-agentic-inbox`.
 4. **Set your mail domain** on the installation, not in the manifest: `pnpm everyapp email set --sender '*@example.com' --inbound '*@example.com'`. The gateway then sends as those addresses, turns on Email Routing for the domain if you agree, and routes its mail to the Worker. `pnpm everyapp email show` prints them.
 5. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
 
@@ -43,11 +43,9 @@ Deployed: the app is live at `https://agentic-inbox.everyapp.team/` with mail on
 
 ## Getting Started
 
-You need Node 22+, pnpm 10, and [every-app/private-every-app](https://github.com/every-app/private-every-app) cloned next to this repository, as `../private-every-app`: `@every-app/sdk` and the `everyapp` CLI are `link:` dependencies on it (see `package.json`). Run `pnpm install` there once (it builds the SDK), then `pnpm install` here. A lone clone installs with dangling symlinks, and `pnpm dev` fails with `everyapp: command not found`.
+You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are vendored in [`vendor/`](vendor/README.md) (`file:` dependencies in `package.json`), so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
 
 ```bash
-git clone git@github.com:every-app/private-every-app.git ../private-every-app
-(cd ../private-every-app && pnpm install)   # once: it builds the SDK
 pnpm install
 cp .dev.vars.example .dev.vars              # optional: AI keys, a real mail transport
 pnpm everyapp dev                           # http://agentic-inbox.localhost:8787, signed in as a seeded owner

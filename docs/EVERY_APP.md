@@ -46,11 +46,9 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 
 ## Run it locally
 
-You need Node 22+, pnpm 10, and [every-app/private-every-app](https://github.com/every-app/private-every-app) cloned next to this repository as `../private-every-app`, on `main`. The SDK and CLI are linked from it (`link:` dependencies in `package.json`) while publishing is paused: run `pnpm install` there once (it builds the SDK), then here. A lone clone installs with dangling symlinks, and `pnpm dev` fails with `everyapp: command not found`.
+You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are vendored in [`vendor/`](vendor/README.md) (`file:` dependencies in `package.json`), so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
 
 ```bash
-git clone git@github.com:every-app/private-every-app.git ../private-every-app
-(cd ../private-every-app && pnpm install)   # once: it builds the SDK
 pnpm install
 cp .dev.vars.example .dev.vars    # optional: AI keys, a real mail transport
 pnpm everyapp dev                 # or: pnpm everyapp dev --port 8801

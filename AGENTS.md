@@ -4,8 +4,7 @@ This is [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) 
 
 ## Setup
 
-- The Every App repository ([every-app/private-every-app](https://github.com/every-app/private-every-app)) must sit beside this one as `../private-every-app`, on `main`. `@every-app/sdk` and the `everyapp` CLI are `link:` dependencies on it. Run `pnpm install` there once (it builds the SDK), then install here. Without that checkout the links dangle, and `pnpm dev` fails with `everyapp: command not found`.
-- In a git worktree outside the parent directory, the relative `link:` paths point nowhere. Make `<worktree>/../private-every-app` a symlink to the checkout.
+- `@every-app/sdk` and the `everyapp` CLI are vendored tarballs (`vendor/README.md`, `file:` dependencies in `package.json`): `pnpm install` here is all a clone or a worktree needs, no Every App checkout beside it. To work against a live checkout, point the two specifiers at `link:` paths locally and don't commit that.
 - pnpm only (`packageManager` pins it). Install with `pnpm install --ignore-scripts`: upstream code is third party, and nothing here needs an install script (`pnpm-workspace.yaml` lists the skipped ones).
 
 ## Commands
@@ -18,10 +17,10 @@ This is [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) 
 
 ## Every App
 
-- Run it with `pnpm dev` (`everyapp dev`). Deploy only with `pnpm everyapp deploy`, or `pnpm run deploy` (the package's `deploy` script, `everyapp deploy`), from this directory; the live copy is `agentic-inbox.everyapp.team`.
+- Run it with `pnpm dev` (`everyapp dev`). Deploys run from an Every App checkout: `pnpm everyapp install https://github.com/every-app/agentic-inbox` there installs the latest release, or that checkout's CLI from this directory (`node ../every-app/packages/cli/bin/everyapp.js deploy`) deploys the working tree; `pnpm run deploy` here runs the vendored CLI, which can't update the Gateway. The live copy is `agentic-inbox.everyapp.team`.
 - `everyapp.config.ts` is the manifest: the resources (two Durable Objects), the AI providers and models, the `email` capability and `email.inbound`. An app's own secrets would be declared there too; this one has none. The Gateway settings it needs (`OPENROUTER_API_KEY`, required; `WORKERS_AI_API_TOKEN`, optional; `EMAIL_FROM`, required by the `email` capability) are set by the person with `pnpm everyapp secret set <NAME>`, from any directory.
 - Senders and inbound addresses belong to the installation, not the manifest: `pnpm everyapp email set --sender '*@<domain>' --inbound '*@<domain>'` after the first deploy; `pnpm everyapp email show` prints them.
-- The `everyapp` skill (every command and flag, the manifest, secrets, email, deploy) is in the platform checkout at `../private-every-app/packages/cli/skills/everyapp/SKILL.md`. Read it before running any `everyapp` command.
+- The `everyapp` skill (every command and flag, the manifest, secrets, email, deploy) is in the vendored CLI at `node_modules/everyapp/skills/everyapp/SKILL.md`. Read it before running any `everyapp` command.
 
 ## Where changes go
 
