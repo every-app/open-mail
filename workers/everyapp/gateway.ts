@@ -67,23 +67,29 @@ export function providerOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">) {
 }
 
 /**
+ * The step that sets the selected provider's key on the gateway, which every
+ * "AI isn't set up" sentence ends with: the key's name and the command that
+ * sets it. Nothing else: switching providers is a redeploy with the other
+ * AI_PROVIDER (read when the Worker is built), which is the operator's
+ * business and docs/EVERY_APP.md's to say, not a sentence a member reads.
+ */
+export function aiProviderSetupStep(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
+	const name = providerOf(env).settings[0];
+	return `An admin sets ${name} with \`pnpm everyapp secret set ${name}\`.`;
+}
+
+/**
  * What a person reads when the gateway refuses a model call with
  * `ai_provider_not_configured`: the selected provider's key isn't set on the
- * gateway. Names the key and the command that sets it, and the other
- * provider as the alternative (a different provider is a redeploy, since
- * AI_PROVIDER is read when the Worker is built). The manifest requires
+ * gateway. One plain sentence, then the step. The manifest requires
  * OPENROUTER_API_KEY, so the gateway doesn't open the app before it is set;
  * this is what a Worker built with the default AI_PROVIDER=workers-ai says
- * while WORKERS_AI_API_TOKEN is missing.
+ * while WORKERS_AI_API_TOKEN is missing. The auto-draft skip shows it as is
+ * ("No draft for this email: …"); the chat says what it can't do first
+ * (aiFailureMessage()).
  */
 export function aiProviderNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
-	const selected = providerIdOf(env);
-	const other = selected === "openrouter" ? "workers-ai" : "openrouter";
-	const name = PROVIDERS[selected].settings[0];
-	return (
-		`The AI provider isn't set up on this gateway. An admin sets ${name} with ` +
-		`\`pnpm everyapp secret set ${name}\` (or ${PROVIDERS[other].settings[0]}, and redeploys the app with AI_PROVIDER=${other}).`
-	);
+	return `AI isn't set up on this gateway yet. ${aiProviderSetupStep(env)}`;
 }
 
 /**

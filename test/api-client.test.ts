@@ -53,7 +53,7 @@ describe("send refusals", () => {
 		expect(error.status).toBe(502);
 		expect(error.code).toBe("email_sender_not_allowed");
 		expect(error.message).toBe(
-			"This mailbox's domain isn't one this app may send from. An owner adds it with everyapp email set --sender.",
+			"This mailbox's domain isn't allowed to send yet. An owner or admin allows it in the app's directory with pnpm everyapp email set --sender '*@<domain>'. Your mail is kept here.",
 		);
 		expect(calls[0].url).toBe("/api/v1/mailboxes/info@other.example/emails");
 		expect(calls[0].init?.method).toBe("POST");
@@ -62,7 +62,7 @@ describe("send refusals", () => {
 	it("the other gateway email refusals read as sentences too", async () => {
 		for (const [code, text] of [
 			["email_budget_exhausted", "The gateway's sending limit for today is reached. Try again later."],
-			["email_sender_not_verified", "This mailbox's domain isn't set up for Email Sending"],
+			["email_sender_not_verified", "This mailbox's domain isn't verified for sending yet"],
 			["integration_not_configured", "Email sending isn't set up on this gateway."],
 			["email_not_configured", "Email sending isn't set up on this gateway."],
 		] as const) {

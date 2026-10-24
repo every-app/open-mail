@@ -80,7 +80,7 @@ function UrlField({ label, url }: { label: string; url: string }) {
 				<div className="absolute right-1.5 top-1/2 -translate-y-1/2">
 					<CopyButton text={url} />
 				</div>
-				<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line break-all leading-relaxed">
+				<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line [overflow-wrap:anywhere] leading-relaxed">
 					{url}
 				</div>
 			</div>
@@ -93,8 +93,10 @@ function UrlField({ label, url }: { label: string; url: string }) {
  * them twice: its own /mcp, one connector for every app the person uses
  * (OAuth sign-in from the client, or a personal access token), and this
  * app's host /mcp, for this app alone (a personal access token). The
- * gateway's origin comes from /api/v1/me; until that answers, only the app
- * host's URL shows.
+ * connector comes first, with the Claude Code command to paste
+ * (landing-page/content/agent/mcp.md's form); the token path is behind a
+ * disclosure. The gateway's origin comes from /api/v1/me; until that
+ * answers, only the app host's URL shows.
  */
 export default function MCPPanel() {
 	const { data: me } = useQuery({ ...meQuery, retry: false });
@@ -145,29 +147,49 @@ export default function MCPPanel() {
 						</p>
 					</div>
 				)}
-				<div className="space-y-1">
-					<UrlField label="This app only" url={appMcpUrl} />
-					<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-						Connect with a personal access token from the gateway,
-						sent as <code className="font-mono">Authorization: Bearer epat_…</code>.
-						{gatewayOrigin ? (
-							<>
-								{" "}Create one on the gateway under{" "}
-								<a
-									href={`${gatewayOrigin}/admin/tokens`}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="text-kumo-link hover:text-kumo-link-hover"
-								>
-									Tokens
-								</a>
-								.
-							</>
-						) : (
-							" Create one on your gateway under Tokens."
-						)}
-					</p>
-				</div>
+				{gatewayMcpUrl && (
+					<div className="space-y-1">
+						<UrlField
+							label="Claude Code"
+							url={`claude mcp add --transport http everyapp ${gatewayMcpUrl}`}
+						/>
+						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+							Then in Claude Code: /mcp → everyapp → Authenticate.
+						</p>
+						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+							claude.ai, ChatGPT and Cursor: add the connector URL as
+							a custom connector or MCP server and sign in when asked.
+						</p>
+					</div>
+				)}
+				<details className="space-y-1">
+					<summary className="text-xs font-medium text-kumo-strong cursor-pointer">
+						Using a personal access token instead
+					</summary>
+					<div className="space-y-1 pt-1">
+						<UrlField label="This app only" url={appMcpUrl} />
+						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
+							Connect with a personal access token from the gateway,
+							sent as <code className="font-mono">Authorization: Bearer epat_…</code>.
+							{gatewayOrigin ? (
+								<>
+									{" "}Create one on the gateway under{" "}
+									<a
+										href={`${gatewayOrigin}/admin/tokens`}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="text-kumo-link hover:text-kumo-link-hover"
+									>
+										Tokens
+									</a>
+									.
+								</>
+							) : (
+								" Create one on your gateway under Tokens."
+							)}
+						</p>
+					</div>
+				</details>
 
 				{/* Available tools */}
 				<div className="space-y-2">

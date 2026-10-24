@@ -129,10 +129,8 @@ export default function App() {
 export function ErrorBoundary({ error }: { error: unknown }) {
 	let title = "Something went wrong";
 	let description = "An unexpected error occurred. Please try again.";
-	let status: number | null = null;
 
 	if (isRouteErrorResponse(error)) {
-		status = error.status;
 		if (error.status === 404) {
 			title = "Page not found";
 			description =
@@ -149,7 +147,7 @@ export function ErrorBoundary({ error }: { error: unknown }) {
 		<div className="flex items-center justify-center min-h-screen p-8">
 			<Empty
 				icon={<WarningIcon size={48} className="text-kumo-inactive" />}
-				title={status === 404 ? "404 — Page not found" : title}
+				title={title}
 				description={description}
 				contents={
 					<Button

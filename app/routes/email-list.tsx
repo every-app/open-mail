@@ -31,25 +31,27 @@ import {
 } from "~/queries/emails";
 import { useFolders } from "~/queries/folders";
 import { queryKeys } from "~/queries/keys";
+import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
 import type { Email } from "~/types";
 
 const PAGE_SIZE = 25;
 
+/** What fills each folder; a description may name the mailbox's address. */
 const FOLDER_EMPTY_STATES: Record<
 	string,
 	{
 		icon: React.ReactNode;
 		title: string;
-		description: string;
+		description: string | ((address: string) => string);
 		showCompose?: boolean;
 	}
 > = {
 	[Folders.INBOX]: {
 		icon: <TrayIcon size={48} weight="thin" className="text-kumo-subtle" />,
 		title: "Your inbox is empty",
-		description:
-			"New emails will appear here when they arrive. Send an email to get the conversation started.",
+		description: (address) =>
+			`Mail sent to ${address} lands here, and the agent drafts a reply for you in Drafts.`,
 		showCompose: true,
 	},
 	[Folders.SENT]: {
@@ -62,8 +64,9 @@ const FOLDER_EMPTY_STATES: Record<
 	},
 	[Folders.DRAFT]: {
 		icon: <FileIcon size={48} weight="thin" className="text-kumo-subtle" />,
-		title: "No drafts",
-		description: "Emails you're still working on will be saved here.",
+		title: "No drafts yet",
+		description:
+			"When mail arrives, the agent drafts a reply here for you to review and send. Anything you save from Compose lands here too.",
 		showCompose: true,
 	},
 	[Folders.ARCHIVE]: {
@@ -77,6 +80,13 @@ const FOLDER_EMPTY_STATES: Record<
 		title: "Trash is empty",
 		description:
 			"Deleted emails will appear here. You can restore them or permanently delete them.",
+	},
+	[Folders.SPAM]: {
+		icon: (
+			<EnvelopeSimpleIcon size={48} weight="thin" className="text-kumo-subtle" />
+		),
+		title: "No spam",
+		description: "Mail flagged as spam lands here.",
 	},
 };
 
@@ -104,9 +114,12 @@ function EmailListSkeleton() {
 
 function FolderEmptyState({
 	folder,
+	address,
 	onCompose,
 }: {
 	folder?: string;
+	/** The mailbox's address, for the folders whose description names it. */
+	address: string;
 	onCompose: () => void;
 }) {
 	const config = (folder && FOLDER_EMPTY_STATES[folder]) || {
@@ -116,6 +129,10 @@ function FolderEmptyState({
 		title: "No emails",
 		description: "This folder is empty.",
 	};
+	const description =
+		typeof config.description === "function"
+			? config.description(address)
+			: config.description;
 
 	return (
 		<div className="flex flex-col items-center justify-center py-24 px-6 text-center">
@@ -124,7 +141,7 @@ function FolderEmptyState({
 				{config.title}
 			</h3>
 			<p className="text-sm text-kumo-subtle max-w-xs mb-5">
-				{config.description}
+				{description}
 			</p>
 			{"showCompose" in config && config.showCompose && (
 				<Button
@@ -177,6 +194,7 @@ export default function EmailListRoute() {
 	const totalCount = emailData?.totalCount ?? 0;
 
 	const { data: folders = [] } = useFolders(mailboxId);
+	const { data: mailbox } = useMailbox(mailboxId);
 
 	const folderName = useMemo(() => {
 		const found = folders.find((f) => f.id === folder);
@@ -440,6 +458,7 @@ export default function EmailListRoute() {
 					) : (
 						<FolderEmptyState
 							folder={folder}
+							address={mailbox?.email ?? mailboxId ?? ""}
 							onCompose={() => startCompose()}
 						/>
 					)}

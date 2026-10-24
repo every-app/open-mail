@@ -10,7 +10,7 @@ import {
 	stepCountIs,
 } from "ai";
 import { agentModelId, aiFailureOf, gatewayModel, withGateway } from "../everyapp/gateway";
-import { aiFailureMessage, aiSetupProblem, chatNotice, chatReply, forMailbox, skipAutoDraft } from "../everyapp/agent-ai";
+import { aiFailureMessage, aiSetupProblem, chatNotice, chatReply, forMailbox, scanFailureReason, skipAutoDraft } from "../everyapp/agent-ai";
 import { z } from "zod";
 import type { EmailFull, EmailMetadata } from "../lib/schemas";
 import { verifyDraft, isPromptInjection } from "../lib/ai";
@@ -359,7 +359,7 @@ export class EmailAgent extends AIChatAgent<any> {
 				const isInjection = await isPromptInjection(env.AI, email.body);
 				// The scanner fails closed: a scan that didn't run is no verdict.
 				const scanFailure = isInjection && aiFailureOf(env.AI);
-				if (scanFailure) return skipAutoDraft(this, emailData, `the prompt-injection scan couldn't run (${scanFailure})`);
+				if (scanFailure) return skipAutoDraft(this, emailData, scanFailureReason(env, scanFailure));
 				if (isInjection) {
 					console.warn("Skipping auto-draft due to detected prompt injection:", emailData.emailId);
 					
@@ -409,7 +409,7 @@ export class EmailAgent extends AIChatAgent<any> {
 			if (threadContext) {
 				const threadInjection = await isPromptInjection(env.AI, threadContext);
 				const threadScanFailure = threadInjection && aiFailureOf(env.AI);
-				if (threadScanFailure) return skipAutoDraft(this, emailData, `the prompt-injection scan couldn't run (${threadScanFailure})`);
+				if (threadScanFailure) return skipAutoDraft(this, emailData, scanFailureReason(env, threadScanFailure));
 				if (threadInjection) {
 					console.warn("Skipping auto-draft due to prompt injection in thread context:", emailData.threadId);
 					const newMessages = [

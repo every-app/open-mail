@@ -2,19 +2,26 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
+import { Button, Empty } from "@cloudflare/kumo";
+import { WarningIcon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
-import { Outlet, useParams } from "react-router";
+import { Outlet, useNavigate, useParams } from "react-router";
 import AgentSidebar from "~/components/AgentSidebar";
 import ComposeEmail from "~/components/ComposeEmail";
 import Header from "~/components/Header";
 import Sidebar from "~/components/Sidebar";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import { ApiError } from "~/services/api";
 
 export default function MailboxRoute() {
 	const { mailboxId } = useParams<{ mailboxId: string }>();
-	// Prefetch mailbox data for child components
-	useMailbox(mailboxId);
+	const navigate = useNavigate();
+	// Prefetch mailbox data for child components. A 404 means there is no such
+	// mailbox (deleted, or a wrong address in the link): say so instead of
+	// rendering an inbox, Compose and an agent for data that isn't there.
+	const { error } = useMailbox(mailboxId);
+	const missing = error instanceof ApiError && error.status === 404;
 	const prevMailboxIdRef = useRef<string | undefined>(undefined);
 	const {
 		isSidebarOpen,
@@ -37,6 +44,25 @@ export default function MailboxRoute() {
 
 		prevMailboxIdRef.current = mailboxId;
 	}, [mailboxId, closeComposeModal, closePanel, closeSidebar]);
+
+	if (missing) {
+		return (
+			<div className="flex items-center justify-center min-h-screen">
+				<div className="max-w-md mx-auto p-8">
+					<Empty
+						icon={<WarningIcon size={48} className="text-kumo-inactive" />}
+						title="This mailbox doesn't exist"
+						description="It may have been deleted, or the address in this link is wrong."
+						contents={
+							<Button variant="primary" size="sm" onClick={() => navigate("/")}>
+								Back to Mailboxes
+							</Button>
+						}
+					/>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex h-screen overflow-hidden">

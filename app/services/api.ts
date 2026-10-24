@@ -11,12 +11,15 @@ const REQUEST_TIMEOUT_MS = 30_000;
  * Refusals are `{ error: <code>, message? }` (the gateway's email capability,
  * relayed by the send routes as 502) or `{ error, code }` (the role check);
  * upstream's own routes put readable text in `error`, which passes through.
+ * Each names the next step once, for the person who can take it; plain text,
+ * since the composer's banner and the toasts render no markup. The composer
+ * fills `<domain>` with the mailbox's own (useComposeForm's send).
  */
 const REFUSAL_MESSAGES: Record<string, string> = {
 	email_sender_not_allowed:
-		"This mailbox's domain isn't one this app may send from. An owner adds it with everyapp email set --sender.",
+		"This mailbox's domain isn't allowed to send yet. An owner or admin allows it in the app's directory with pnpm everyapp email set --sender '*@<domain>'. Your mail is kept here.",
 	email_sender_not_verified:
-		"This mailbox's domain isn't set up for Email Sending on the gateway's Cloudflare account yet. The gateway's operator onboards the domain.",
+		"This mailbox's domain isn't verified for sending yet. An owner or admin onboards it to Email Sending on the gateway's Cloudflare account. Your mail is kept here.",
 	email_budget_exhausted:
 		"The gateway's sending limit for today is reached. Try again later.",
 	email_provider_limited:
@@ -28,8 +31,10 @@ const REFUSAL_MESSAGES: Record<string, string> = {
 	email_invalid_message:
 		"The gateway refused this email as malformed. Check the recipients and try again.",
 	email_send_failed: "The email couldn't be sent. Try again in a moment.",
-	email_not_configured: "Email sending isn't set up on this gateway.",
-	integration_not_configured: "Email sending isn't set up on this gateway.",
+	email_not_configured:
+		"Email sending isn't set up on this gateway. An owner or admin sets its sender with pnpm everyapp secret set EMAIL_FROM EMAIL_FROM_NAME. Your mail is kept here; save it as a draft for now.",
+	integration_not_configured:
+		"Email sending isn't set up on this gateway. An owner or admin sets its sender with pnpm everyapp secret set EMAIL_FROM EMAIL_FROM_NAME. Your mail is kept here; save it as a draft for now.",
 	capability_not_requested:
 		"This app isn't allowed to send email on this gateway (its manifest doesn't request the email capability).",
 	integration_read_only: "This connection is read only; it can't send email.",

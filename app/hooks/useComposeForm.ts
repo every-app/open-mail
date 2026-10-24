@@ -17,6 +17,7 @@ import {
 import { useDeleteEmail, useForwardEmail, useReplyToEmail, useSaveDraft, useSendEmail } from "~/queries/emails";
 import { useMailbox } from "~/queries/mailboxes";
 import { useUIStore } from "~/hooks/useUIStore";
+import { ApiError } from "~/services/api";
 
 function appendUniqueAddress(
 	addresses: string[],
@@ -258,7 +259,13 @@ export function useComposeForm(mailboxId?: string, _folder?: string) {
 			if (draftId) deleteEmailMutation.mutate({ mailboxId, id: draftId });
 			toastManager.add({ title: "Email sent!" });
 			onClose();
-		} catch (err: unknown) { const message = (err instanceof Error ? err.message : null) || "Failed to send email."; setError(message); toastManager.add({ title: message, variant: "error" }); }
+		} catch (err: unknown) {
+			// The composer's banner shows it, next to the mail it is about; no toast too.
+			// The sender refusal's command has a `<domain>` placeholder; this mailbox's domain fills it.
+			const message = (err instanceof Error ? err.message : null) || "Failed to send email.";
+			const domain = currentMailbox.email.split("@")[1];
+			setError(err instanceof ApiError && err.code === "email_sender_not_allowed" && domain ? message.replace("<domain>", domain) : message);
+		}
 		finally { setIsSending(false); }
 	};
 

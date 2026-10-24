@@ -6,9 +6,9 @@
  * The chat panel renders the assistant's text and tool calls but not a
  * stream error (upstream's AgentPanel reads no `error`), so a failure reaches
  * the person as an assistant message: "AI isn't set up on this gateway
- * (OPENROUTER_API_KEY) or in .dev.vars", "The AI provider isn't set up on
- * this gateway. An admin sets …" (the key missing on the gateway), or the
- * gateway's refusal.
+ * (OPENROUTER_API_KEY) or in .dev.vars", "AI isn't set up on this gateway
+ * yet, so I can't help with this inbox. An admin sets …" (the key missing on
+ * the gateway), or the gateway's refusal.
  */
 import {
 	ConfigurationError,
@@ -22,7 +22,7 @@ import {
 	type UIMessage,
 	type UIMessageChunk,
 } from "ai";
-import { aiProviderNotSetUpMessage, providerOf } from "./gateway";
+import { aiProviderNotSetUpMessage, aiProviderSetupStep, providerOf } from "./gateway";
 
 /**
  * Whom a mailbox's agent calls are for. Nothing a person sent starts them
@@ -67,19 +67,21 @@ export function aiSetupProblem(env: Cloudflare.Env, target?: GatewayCallFor): st
 }
 
 /**
- * A failed model call as a sentence: the configuration message, the sentence
- * naming the key to set when the selected provider isn't configured on the
- * gateway (`ai_provider_not_configured`: aiProviderNotSetUpMessage()), any
- * other gateway refusal with its code (`model_not_allowed`, …, read from the
- * response body), or the provider's own error. (An AttributionError can only
- * come from making the gateway fetch, which aiSetupProblem() does first and
- * throws.)
+ * A failed model call as a sentence: the configuration message, what the
+ * agent can't do and the key to set when the selected provider isn't
+ * configured on the gateway (`ai_provider_not_configured`:
+ * aiProviderSetupStep()), any other gateway refusal with its code
+ * (`model_not_allowed`, …, read from the response body), or the provider's
+ * own error. (An AttributionError can only come from making the gateway
+ * fetch, which aiSetupProblem() does first and throws.)
  */
 export function aiFailureMessage(env: Cloudflare.Env, error: unknown): string {
 	if (error instanceof ConfigurationError) return aiNotSetUpMessage(env);
 	if (APICallError.isInstance(error)) {
 		const refusal = refusalOf(error);
-		if (refusal?.code === "ai_provider_not_configured") return aiProviderNotSetUpMessage(env);
+		if (refusal?.code === "ai_provider_not_configured") {
+			return `AI isn't set up on this gateway yet, so I can't help with this inbox. ${aiProviderSetupStep(env)}`;
+		}
 		if (refusal) return `The gateway refused the AI call: ${refusal.message} (${refusal.code})`;
 		return `The AI provider answered ${error.statusCode ?? "with an error"}: ${error.message || "no details"}`;
 	}
@@ -153,9 +155,20 @@ export function chatReply(stream: ReadableStream<UIMessageChunk>): Response {
 }
 
 /**
+ * Why an auto-draft is skipped when the prompt-injection scan didn't run
+ * (`aiFailureOf()` after `isPromptInjection()` failed closed): the not-set-up
+ * sentence by itself, since nothing about the scan helps the person reading
+ * it, and any other failure as the scan's.
+ */
+export function scanFailureReason(env: Pick<Cloudflare.Env, "AI_PROVIDER">, failure: string): string {
+	return failure === aiProviderNotSetUpMessage(env) ? failure : `the prompt-injection scan couldn't run (${failure})`;
+}
+
+/**
  * Skip a new email's auto-draft and say why in the agent's chat, as upstream
  * does when it blocks one: the email stays in the inbox, only the draft is
- * not written.
+ * not written. The note leads with what didn't happen ("No draft for this
+ * email: …"), and the reason is one plain sentence (scanFailureReason()).
  */
 export async function skipAutoDraft(
 	agent: { messages: UIMessage[]; persistMessages(messages: UIMessage[]): Promise<void> },
@@ -164,7 +177,7 @@ export async function skipAutoDraft(
 ): Promise<{ status: "skipped"; reason: string }> {
 	console.warn(`Skipping auto-draft for ${email.emailId}: ${reason}`);
 	const trigger = `[Auto-triggered] New email from ${email.sender}: "${email.subject}"`;
-	const note = `⚠️ Skipped auto-draft creation: ${reason}`;
+	const note = `⚠️ No draft for this email: ${reason}`;
 	await agent.persistMessages([
 		...agent.messages,
 		{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: trigger }] },

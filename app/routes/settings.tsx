@@ -4,9 +4,11 @@
 
 import { Badge, Button, Input, Loader, useKumoToastManager } from "@cloudflare/kumo";
 import { RobotIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
+import { meQuery } from "~/services/api";
 
 // Placeholder shown in the textarea when no custom prompt is set.
 // The authoritative default prompt lives in workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
@@ -17,6 +19,13 @@ export default function SettingsRoute() {
 	const toastManager = useKumoToastManager();
 	const { data: mailbox } = useMailbox(mailboxId);
 	const updateMailboxMutation = useUpdateMailbox();
+
+	// Only owners and admins may change a mailbox; the Worker enforces it
+	// (workers/everyapp/identity.ts). The page hides what it would refuse,
+	// as the home page does, once the role is known.
+	const { data: me } = useQuery(meQuery);
+	const isAdmin = me?.role === "owner" || me?.role === "admin";
+	const readOnly = me !== undefined && !isAdmin;
 
 	const [displayName, setDisplayName] = useState("");
 	const [agentPrompt, setAgentPrompt] = useState("");
@@ -40,11 +49,9 @@ export default function SettingsRoute() {
 		try {
 			await updateMailboxMutation.mutateAsync({ mailboxId, settings });
 			toastManager.add({ title: "Settings saved!" });
-		} catch {
-			toastManager.add({
-				title: "Failed to save settings",
-				variant: "error",
-			});
+		} catch (err: unknown) {
+			const message = (err instanceof Error ? err.message : null) || "Failed to save settings";
+			toastManager.add({ title: message, variant: "error" });
 		} finally {
 			setIsSaving(false);
 		}
@@ -66,21 +73,29 @@ export default function SettingsRoute() {
 
 	return (
 		<div className="max-w-2xl px-4 py-4 md:px-8 md:py-6 h-full overflow-y-auto">
-			<h1 className="text-lg font-semibold text-kumo-default mb-6">Settings</h1>
+			<div className="mb-6">
+				<h1 className="text-lg font-semibold text-kumo-default">Settings</h1>
+				{readOnly && (
+					<p className="text-sm text-kumo-subtle mt-1">
+						Only owners and admins can change a mailbox's settings.
+					</p>
+				)}
+			</div>
 
 			<div className="space-y-6">
-				{/* Account */}
+				{/* The mailbox: how its mail is signed, and its address */}
 				<div className="rounded-lg border border-kumo-line bg-kumo-base p-5">
 					<div className="text-sm font-medium text-kumo-default mb-4">
-						Account
+						Mailbox
 					</div>
 					<div className="space-y-3">
 						<Input
-							label="Display Name"
+							label="Sender name"
 							value={displayName}
 							onChange={(e) => setDisplayName(e.target.value)}
+							disabled={readOnly}
 						/>
-						<Input label="Email" type="email" value={mailbox.email} disabled />
+						<Input label="Address" type="email" value={mailbox.email} disabled />
 					</div>
 				</div>
 
@@ -98,7 +113,7 @@ export default function SettingsRoute() {
 								<Badge variant="secondary">Default</Badge>
 							)}
 						</div>
-						{isCustomPrompt && (
+						{isCustomPrompt && !readOnly && (
 							<Button
 								variant="ghost"
 								size="xs"
@@ -118,6 +133,7 @@ export default function SettingsRoute() {
 						onChange={(e) => setAgentPrompt(e.target.value)}
 						placeholder={PROMPT_PLACEHOLDER}
 						rows={12}
+						disabled={readOnly}
 						className="w-full resize-y rounded-lg border border-kumo-line bg-kumo-recessed px-3 py-2 text-xs text-kumo-default placeholder:text-kumo-subtle focus:outline-none focus:ring-1 focus:ring-kumo-ring font-mono leading-relaxed"
 					/>
 					<p className="text-xs text-kumo-subtle mt-2">
@@ -127,11 +143,13 @@ export default function SettingsRoute() {
 				</div>
 
 				{/* Save */}
-				<div className="flex justify-end">
-					<Button variant="primary" onClick={handleSave} loading={isSaving}>
-						Save Changes
-					</Button>
-				</div>
+				{!readOnly && (
+					<div className="flex justify-end">
+						<Button variant="primary" onClick={handleSave} loading={isSaving}>
+							Save Changes
+						</Button>
+					</div>
+				)}
 			</div>
 		</div>
 	);

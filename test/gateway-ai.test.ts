@@ -17,12 +17,14 @@ import {
 	chatNotice,
 	chatReply,
 	forMailbox,
+	scanFailureReason,
 	skipAutoDraft,
 } from "../workers/everyapp/agent-ai";
 import {
 	agentModelId,
 	aiFailureOf,
 	aiProviderNotSetUpMessage,
+	aiProviderSetupStep,
 	gatewayAi,
 	gatewayModel,
 	mapModel,
@@ -154,7 +156,7 @@ describe("gatewayAi(): the run() shim lib/ai.ts calls", () => {
 		);
 		const ai = gatewayAi(env({ EVERY_APP_GATEWAY: gateway.binding }));
 		await expect(ai.run("@cf/meta/llama-3.1-8b-instruct-fast" as never, { messages: chat } as never)).rejects.toThrow(
-			"The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
+			"AI isn't set up on this gateway yet. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN`.",
 		);
 		// The scanner fails closed; the agent reads why and skips the draft with this sentence, not "prompt injection".
 		expect(await isPromptInjection(ai, "A perfectly normal email body.")).toBe(true);
@@ -357,12 +359,25 @@ describe("what the agent says when AI fails", () => {
 		expect(aiSetupProblem(shared, { background: true, organizationId: "org-1" })).toBeNull();
 	});
 
-	it("aiProviderNotSetUpMessage(): the selected provider's key, the command, and the other provider as a redeploy", () => {
+	it("aiProviderNotSetUpMessage(): one plain sentence naming the selected provider's key and the command, no provider switch", () => {
 		expect(aiProviderNotSetUpMessage(env())).toBe(
-			"The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
+			"AI isn't set up on this gateway yet. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN`.",
 		);
 		expect(aiProviderNotSetUpMessage(env({ AI_PROVIDER: "openrouter" }))).toBe(
-			"The AI provider isn't set up on this gateway. An admin sets OPENROUTER_API_KEY with `pnpm everyapp secret set OPENROUTER_API_KEY` (or WORKERS_AI_API_TOKEN, and redeploys the app with AI_PROVIDER=workers-ai).",
+			"AI isn't set up on this gateway yet. An admin sets OPENROUTER_API_KEY with `pnpm everyapp secret set OPENROUTER_API_KEY`.",
+		);
+		expect(aiProviderSetupStep(env({ AI_PROVIDER: "openrouter" }))).toBe(
+			"An admin sets OPENROUTER_API_KEY with `pnpm everyapp secret set OPENROUTER_API_KEY`.",
+		);
+		// Switching providers is a redeploy with the other AI_PROVIDER: the operator's, said in docs/EVERY_APP.md.
+		expect(aiProviderNotSetUpMessage(env())).not.toMatch(/redeploy|AI_PROVIDER|OPENROUTER/);
+	});
+
+	it("scanFailureReason(): the not-set-up sentence stands by itself; any other failure is the scan's", () => {
+		const notSetUp = aiProviderNotSetUpMessage(env({ AI_PROVIDER: "openrouter" }));
+		expect(scanFailureReason(env({ AI_PROVIDER: "openrouter" }), notSetUp)).toBe(notSetUp);
+		expect(scanFailureReason(env(), "ai 502: upstream exploded")).toBe(
+			"the prompt-injection scan couldn't run (ai 502: upstream exploded)",
 		);
 	});
 
@@ -385,9 +400,12 @@ describe("what the agent says when AI fails", () => {
 			503,
 			"Provider is not configured: the gateway needs WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for workers-ai.",
 		);
-		expect(aiFailureMessage(env(), notConfigured)).toBe(aiProviderNotSetUpMessage(env()));
+		// The chat says what it can't do, then the same step the auto-draft skip ends with.
+		expect(aiFailureMessage(env(), notConfigured)).toBe(
+			`AI isn't set up on this gateway yet, so I can't help with this inbox. ${aiProviderSetupStep(env())}`,
+		);
 		expect(aiFailureMessage(env({ AI_PROVIDER: "openrouter" }), notConfigured)).toBe(
-			aiProviderNotSetUpMessage(env({ AI_PROVIDER: "openrouter" })),
+			"AI isn't set up on this gateway yet, so I can't help with this inbox. An admin sets OPENROUTER_API_KEY with `pnpm everyapp secret set OPENROUTER_API_KEY`.",
 		);
 		const refused = refusedCall("model_not_allowed", 403, "The app manifest does not allow this model (x); list it in ai.models.");
 		expect(aiFailureMessage(env(), refused)).toBe(
@@ -446,7 +464,7 @@ describe("the chat's reply", () => {
 		const chunks = await uiChunks(chatReply(result.toUIMessageStream({ onError: (error) => aiFailureMessage(e, error) })));
 		expect(chunks.some((c) => c.type === "error")).toBe(false);
 		expect(shownText(chunks)).toBe(
-			"⚠️ The AI provider isn't set up on this gateway. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN` (or OPENROUTER_API_KEY, and redeploys the app with AI_PROVIDER=openrouter).",
+			"⚠️ AI isn't set up on this gateway yet, so I can't help with this inbox. An admin sets WORKERS_AI_API_TOKEN with `pnpm everyapp secret set WORKERS_AI_API_TOKEN`.",
 		);
 	});
 
@@ -474,7 +492,7 @@ describe("skipAutoDraft()", () => {
 		expect(persisted).toHaveLength(1);
 		expect(persisted[0]).toMatchObject([
 			{ role: "user", parts: [{ type: "text", text: '[Auto-triggered] New email from alice@example.org: "Lunch"' }] },
-			{ role: "assistant", parts: [{ type: "text", text: `⚠️ Skipped auto-draft creation: ${aiNotSetUpMessage(env())}` }] },
+			{ role: "assistant", parts: [{ type: "text", text: `⚠️ No draft for this email: ${aiNotSetUpMessage(env())}` }] },
 		]);
 	});
 });

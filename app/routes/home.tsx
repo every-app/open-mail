@@ -138,6 +138,13 @@ export default function HomeRoute() {
 
 	const isConfigured = emailAddresses.length > 0;
 	const canManage = isAdmin && !isConfigured;
+	// Two setup states the page can't get past on its own: the gateway allows
+	// no sender for this app yet (`domains` is empty, so there is nothing to
+	// create a mailbox on), or it has no sender of its own (`ready` is false:
+	// mail arrives and drafts save, sends are refused). SetupBanner says which.
+	const noDomain = !!configData && domains.length === 0 && !isConfigured;
+	const sendingOff = configData?.ready === false && domains.length > 0;
+	const canCreate = canManage && !noDomain;
 	const accounts = isConfigured
 		? emailAddresses.map((addr) => ({
 				id: addr,
@@ -154,7 +161,7 @@ export default function HomeRoute() {
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<h1 className="text-2xl font-bold text-kumo-default">Mailboxes</h1>
-						{canManage && (
+						{canCreate && accounts.length > 0 && (
 							<Button
 								variant="primary"
 								icon={<PlusIcon size={16} />}
@@ -166,7 +173,7 @@ export default function HomeRoute() {
 					</div>
 					{domains.length > 0 && (
 						<p className="text-sm text-kumo-subtle mt-1">
-							{domains.join(", ")}
+							Mailboxes are created on {domains.join(", ")}
 						</p>
 					)}
 					{me && (
@@ -176,7 +183,7 @@ export default function HomeRoute() {
 								<>
 									{" · "}
 									<a href={me.gatewayUrl} className="underline hover:text-kumo-default">
-										Sign out on Every App
+										Back to Every App
 									</a>
 								</>
 							)}
@@ -184,7 +191,7 @@ export default function HomeRoute() {
 					)}
 				</div>
 
-				{configData?.ready === false && <SendingNotReadyBanner />}
+				<SetupBanner noDomain={noDomain} sendingOff={sendingOff} isAdmin={isAdmin} />
 
 				{isLoading ? (
 					<div className="flex justify-center py-20">
@@ -248,11 +255,15 @@ export default function HomeRoute() {
 							<p className="text-sm text-kumo-subtle max-w-sm mb-5">
 								{isConfigured
 									? "Your email routing is configured but no mailboxes have been created yet. They will appear here automatically."
-									: isAdmin
-										? "Create a mailbox to start sending and receiving emails with your domain."
-										: "Ask an owner or admin of your organization to create a mailbox."}
+									: noDomain
+										? isAdmin
+											? "Allow a mail domain first (above), then create a mailbox on it."
+											: "Ask an owner or admin of your organization to finish email setup."
+										: isAdmin
+											? "Create a mailbox to start sending and receiving emails with your domain."
+											: "Ask an owner or admin of your organization to create a mailbox."}
 							</p>
-							{canManage && (
+							{canCreate && (
 								<Button
 									variant="primary"
 									icon={<PlusIcon size={16} />}
@@ -312,7 +323,7 @@ export default function HomeRoute() {
 									</div>
 								) : (
 									<span className="text-sm text-kumo-subtle">
-										{selectedDomain || "no domain"}
+										{selectedDomain || "no domain yet"}
 									</span>
 								)}
 							</div>
@@ -389,17 +400,60 @@ export default function HomeRoute() {
 }
 
 /**
- * `GET /api/v1/config` says `ready: false` when the gateway can't send mail
- * (its email capability isn't configured): say so before anyone composes.
+ * What `GET /api/v1/config` says is missing before the first send works:
+ * no domain (the gateway allows no sender for this app yet, `everyapp email
+ * set --sender`), or sending off (`ready: false` with domains present: the
+ * gateway has no sender of its own, `EMAIL_FROM`). Owners and admins get the
+ * command; members are told whom to ask. Nothing while both are fine.
  */
-function SendingNotReadyBanner() {
+function SetupBanner({
+	noDomain,
+	sendingOff,
+	isAdmin,
+}: {
+	noDomain: boolean;
+	sendingOff: boolean;
+	isAdmin: boolean;
+}) {
+	if (!noDomain && !sendingOff) return null;
+	const title = noDomain
+		? "No mail domain yet"
+		: isAdmin
+			? "Sending is off until the gateway's email sender is set"
+			: "Sending is off until an owner or admin finishes email setup";
+	const description = noDomain ? (
+		isAdmin ? (
+			<>
+				Mailboxes live on a domain this app may send from, and none is
+				allowed yet. In the app's directory run{" "}
+				<Command>
+					pnpm everyapp email set --sender '*@your-domain.com'
+				</Command>
+				, then reload this page.
+			</>
+		) : (
+			"Ask an owner or admin to finish email setup. Mailboxes can be created once a domain is allowed."
+		)
+	) : isAdmin ? (
+		<>
+			Mail still arrives and drafts save. Set it with{" "}
+			<Command>pnpm everyapp secret set EMAIL_FROM EMAIL_FROM_NAME</Command>.
+		</>
+	) : (
+		"Mail still arrives and drafts save."
+	);
 	return (
 		<Banner
 			variant="alert"
 			className="mb-6"
 			icon={<WarningIcon size={18} weight="fill" />}
-			title="Email sending isn't set up on this gateway"
-			description="Mailboxes still receive mail and drafts still save, but sends are refused until the gateway's operator sets up Cloudflare Email Sending for it."
+			title={title}
+			description={description}
 		/>
 	);
+}
+
+/** A command to paste, inline in a sentence; wraps inside a word only when it must. */
+function Command({ children }: { children: React.ReactNode }) {
+	return <code className="font-mono [overflow-wrap:anywhere]">{children}</code>;
 }
