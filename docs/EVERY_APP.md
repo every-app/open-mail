@@ -46,7 +46,7 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 
 ## Run it locally
 
-You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are vendored in [`vendor/`](vendor/README.md) (`file:` dependencies in `package.json`), so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
+You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are the published packages `@every-app/sdk` and `everyapp`, pinned to one exact version in `package.json`, so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
 
 ```bash
 pnpm install
@@ -69,7 +69,7 @@ pnpm everyapp dev                 # or: pnpm everyapp dev --port 8801
 | `pnpm test` | Vitest, two projects (`vitest.config.ts`). `node`: unit tests with fake bindings (the gateway shims, identity, the tool catalog, frontend helpers). `workers`: tests inside workerd through `@cloudflare/vitest-pool-workers`. The production entry is the Worker there, against the real Durable Objects and a local R2 bucket (inbound mail through `receiveEmail()`, the entry's identity check). A file runs in `workers` when it is named `*.workers.test.ts` (or `test/receive-email.test.ts`). The workers project shares storage between tests, so use a fresh mailbox address in each |
 | `pnpm types:check` | `cf workers types` (the Worker's `Env` from `cloudflare.config.ts`), `react-router typegen`, `tsc --noEmit` |
 | `pnpm build` | A development build of the client and the Worker, then `tsc` |
-| `pnpm check:deploy` | What `everyapp deploy` checks before it uploads, offline, through the vendored CLI's `everyapp release --json` (logins hidden; you set nothing): the manifest against the CLI's strict schema (and that it declares `email.inbound`), a production `cf build` for the build's placeholder Worker (`every-hosted--sentinel`, which a deploy replaces), the CLI's Build Output policy, and the built Worker's bindings (no `ai`, no `send_email`, no triggers, the bucket and audience named after the Worker, `AI_PROVIDER` at its build default) |
+| `pnpm check:deploy` | What `everyapp deploy` checks before it uploads, offline, through the installed CLI's `everyapp release --json` (logins hidden; you set nothing): the manifest against the CLI's strict schema (and that it declares `email.inbound`), a production `cf build` for the build's placeholder Worker (`every-hosted--sentinel`, which a deploy replaces), the CLI's Build Output policy, and the built Worker's bindings (no `ai`, no `send_email`, no triggers, the bucket and audience named after the Worker, `AI_PROVIDER` at its build default) |
 | `pnpm check:runbook` | Every setting this runbook tells you to set with `everyapp secret set` is a Gateway setting the command accepts, by the SDK's own list, and none would be taken for an app secret (offline) |
 
 **CI.** The venue has no CI. Its `link:` dependencies need the platform checkout beside it, so a hosted runner can't install it as is. When the SDK and CLI are published again, switch the links to versions and run the commands above in CI.

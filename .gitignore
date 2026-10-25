@@ -21,5 +21,3 @@ skills-lock.json
 .cloudflare/
 .everyapp/
 
-# The vendored Every App CLI and SDK (vendor/README.md) travel with the repository.
-!vendor/*.tgz

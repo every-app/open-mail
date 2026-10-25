@@ -1,7 +1,7 @@
 // `pnpm check:deploy`: what `everyapp deploy` checks before it uploads, run
 // offline. Nothing here talks to Cloudflare or a gateway.
 //
-//  1. `everyapp release --json` (the vendored CLI, vendor/README.md): installs
+//  1. `everyapp release --json` (the pinned `everyapp` package): installs
 //     dependencies, validates everyapp.config.ts with the CLI's strict schema,
 //     builds for production (`cf build`, logins hidden), installs the Build
 //     Output for the build's placeholder target (the SDK's BUILD_SENTINEL),

@@ -43,7 +43,7 @@ Deployed: the app is live at `https://agentic-inbox.everyapp.team/` with mail on
 
 ## Getting Started
 
-You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are vendored in [`vendor/`](vendor/README.md) (`file:` dependencies in `package.json`), so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
+You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are the published packages `@every-app/sdk` and `everyapp`, pinned to one exact version in `package.json`, so a clone of this repository installs and builds on its own: no checkout of the Every App repository beside it.
 
 ```bash
 pnpm install
