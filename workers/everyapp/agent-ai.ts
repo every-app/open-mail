@@ -5,10 +5,10 @@
  *
  * The chat panel renders the assistant's text and tool calls but not a
  * stream error (upstream's AgentPanel reads no `error`), so a failure reaches
- * the person as an assistant message: "AI isn't set up on this gateway
- * (OPENROUTER_API_KEY) or in .dev.vars", "AI isn't set up on this gateway
- * yet, so I can't help with this inbox. An admin sets …" (the key missing on
- * the gateway), or the gateway's refusal.
+ * the person as an assistant message: "AI isn't set up on this gateway (…)
+ * or in .dev.vars (…)", "AI isn't set up on this gateway yet, so I can't
+ * help with this inbox. An admin sets …" (no model set up on the gateway),
+ * or the gateway's refusal.
  */
 import {
 	ConfigurationError,
@@ -22,7 +22,7 @@ import {
 	type UIMessage,
 	type UIMessageChunk,
 } from "ai";
-import { aiProviderNotSetUpMessage, aiProviderSetupStep, providerOf } from "./gateway";
+import { aiProviderNotSetUpMessage, aiProviderSetupStep, isNotConfigured, providerIdOf, providerOf } from "./gateway";
 
 /**
  * Whom a mailbox's agent calls are for. Nothing a person sent starts them
@@ -36,8 +36,16 @@ export function forMailbox(env: Pick<Cloudflare.Env, "EVERY_APP_ORG_ID">): Gatew
 	return organizationId ? { background: true, organizationId } : undefined;
 }
 
-/** What the agent says when no model can be reached, naming what to set. */
+/**
+ * What the agent says when no model can be reached, naming what to set. In
+ * practice local development's (a deployed Worker has the gateway binding):
+ * on the default route any model provider's key in `.dev.vars` (the SDK
+ * resolves the default on it, OpenRouter first), on a pin that provider's.
+ */
 export function aiNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
+	if (providerIdOf(env) === "default") {
+		return "AI isn't set up on this gateway (a model provider's key, OpenRouter's first) or in .dev.vars (OPENROUTER_API_KEY, or another model provider's key).";
+	}
 	const { settings } = providerOf(env);
 	return `AI isn't set up on this gateway (${settings[0]}) or in .dev.vars (${settings.join(" and ")}).`;
 }
@@ -45,8 +53,9 @@ export function aiNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): str
 /**
  * Why the agent can't call a model, as far as the app can tell before it
  * tries; null when it can. With a gateway binding the gateway decides (its
- * refusals are readable, see aiFailureMessage()); in local development the
- * selected provider needs every setting in `.dev.vars`. An AttributionError
+ * refusals are readable, see aiFailureMessage()); in local development a
+ * pinned provider needs every setting in `.dev.vars` (the default route
+ * names none: the SDK resolves it, and says so when it can't). An AttributionError
  * (a call that doesn't say whom it is for where it must) is a bug and is
  * thrown, not shown.
  */
@@ -68,8 +77,8 @@ export function aiSetupProblem(env: Cloudflare.Env, target?: GatewayCallFor): st
 
 /**
  * A failed model call as a sentence: the configuration message, what the
- * agent can't do and the key to set when the selected provider isn't
- * configured on the gateway (`ai_provider_not_configured`:
+ * agent can't do and the key to set when no model is set up on the gateway
+ * (`ai_default_not_configured`, or `ai_provider_not_configured` on a pin:
  * aiProviderSetupStep()), any other gateway refusal with its code
  * (`model_not_allowed`, …, read from the response body), or the provider's
  * own error. (An AttributionError can only come from making the gateway
@@ -79,7 +88,7 @@ export function aiFailureMessage(env: Cloudflare.Env, error: unknown): string {
 	if (error instanceof ConfigurationError) return aiNotSetUpMessage(env);
 	if (APICallError.isInstance(error)) {
 		const refusal = refusalOf(error);
-		if (refusal?.code === "ai_provider_not_configured") {
+		if (isNotConfigured(refusal?.code)) {
 			return `AI isn't set up on this gateway yet, so I can't help with this inbox. ${aiProviderSetupStep(env)}`;
 		}
 		if (refusal) return `The gateway refused the AI call: ${refusal.message} (${refusal.code})`;

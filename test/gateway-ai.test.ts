@@ -1,5 +1,6 @@
 // AI through the gateway: the run() shim lib/ai.ts calls, the ai-sdk
-// provider the agent streams from, and what the chat says when AI fails.
+// provider the agent streams from, and what the chat says when AI fails,
+// on the Gateway's default model (AI_PROVIDER empty) and on the two pins.
 // A fake EVERY_APP_GATEWAY binding plays the gateway; the Workers AI
 // replies are the live captures from the verify-5-0 spike, passed through
 // the SDK's normaliser as the gateway does.
@@ -25,6 +26,7 @@ import {
 	aiFailureOf,
 	aiProviderNotSetUpMessage,
 	aiProviderSetupStep,
+	DEFAULT_SETUP_STEP,
 	gatewayAi,
 	gatewayModel,
 	mapModel,
@@ -90,9 +92,13 @@ function refusal(code: string, status: number, message: string): Response {
 
 const completion = (content: unknown) => Response.json({ choices: [{ message: { role: "assistant", content } }] });
 
+/** A Worker pinned to Workers AI (most of the tests below); pass AI_PROVIDER: "" for the default. */
 function env(extra: Record<string, unknown> = {}): Cloudflare.Env {
 	return { AI_PROVIDER: "workers-ai", AGENT_MODEL: "", ...extra } as unknown as Cloudflare.Env;
 }
+
+/** A Worker built with no AI_PROVIDER: the Gateway's default model. */
+const byDefault = (extra: Record<string, unknown> = {}) => env({ AI_PROVIDER: "", ...extra });
 
 const chat = [{ role: "user", content: "hi" }];
 
@@ -174,6 +180,7 @@ describe("gatewayAi(): the run() shim lib/ai.ts calls", () => {
 describe("gatewayModel(): the agent's ai-sdk provider", () => {
 	it("calls the selected provider's path through the gateway binding with no key, and flips with AI_PROVIDER", async () => {
 		for (const [provider, path, model] of [
+			["", "/api/ai/default/v1/chat/completions", "default"],
 			["workers-ai", "/api/ai/workers-ai/v1/chat/completions", "@cf/meta/llama-4-scout-17b-16e-instruct"],
 			["openrouter", "/api/ai/openrouter/api/v1/chat/completions", "anthropic/claude-haiku-5.5"],
 		] as const) {
@@ -193,13 +200,17 @@ describe("gatewayModel(): the agent's ai-sdk provider", () => {
 		expect(() => gatewayModel(env({ EVERYAPP_DEV: "1" }))).toThrow(ConfigurationError);
 	});
 
-	it("Workers AI is the provider unless AI_PROVIDER says openrouter (the build default; the manifest requires OpenRouter's key, and the default flip is its own PR)", () => {
-		for (const AI_PROVIDER of [undefined, "", "workers-ai", "anything-else"]) {
+	it("the Gateway's default unless AI_PROVIDER pins openrouter or workers-ai", () => {
+		for (const AI_PROVIDER of [undefined, "", " ", "default", "anything-else"]) {
 			const e = { AI_PROVIDER, AGENT_MODEL: "" } as unknown as Cloudflare.Env;
-			expect(providerIdOf(e)).toBe("workers-ai");
-			expect(agentModelId(e)).toBe("@cf/meta/llama-4-scout-17b-16e-instruct");
-			expect(mapModel(e, "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("@cf/meta/llama-3.1-8b-instruct-fast");
+			expect(providerIdOf(e)).toBe("default");
+			expect(agentModelId(e)).toBe("default");
+			expect(mapModel(e, "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("default");
 		}
+		expect(providerIdOf(env({ AI_PROVIDER: "workers-ai" }))).toBe("workers-ai");
+		expect(providerIdOf(env({ AI_PROVIDER: " workers-ai " }))).toBe("workers-ai");
+		expect(agentModelId(env({ AI_PROVIDER: "workers-ai" }))).toBe("@cf/meta/llama-4-scout-17b-16e-instruct");
+		expect(mapModel(env({ AI_PROVIDER: "workers-ai" }), "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("@cf/meta/llama-3.1-8b-instruct-fast");
 		expect(providerIdOf(env({ AI_PROVIDER: "openrouter" }))).toBe("openrouter");
 		expect(agentModelId(env({ AI_PROVIDER: "openrouter" }))).toBe("anthropic/claude-haiku-5.5");
 		expect(mapModel(env({ AI_PROVIDER: "openrouter" }), "@cf/meta/llama-3.1-8b-instruct-fast")).toBe("meta-llama/llama-3.1-8b-instruct");
@@ -267,7 +278,7 @@ describe("the agent's streamText tool loop through the gateway", () => {
 		expect(gateway.calls[1]!.body.messages.map((m: { role: string }) => m.role)).toEqual(["system", "user", "assistant", "tool"]);
 	});
 
-	it("Workers AI (the default): the live llama-4-scout captures, normalised as the gateway does, keep 18°C and raise no error", async () => {
+	it("AI_PROVIDER=workers-ai: the live llama-4-scout captures, normalised as the gateway does, keep 18°C and raise no error", async () => {
 		const answer = (seen: Seen) =>
 			normalizeWorkersAiResponse(
 				"/v1/chat/completions",
@@ -301,6 +312,95 @@ describe("the agent's streamText tool loop through the gateway", () => {
 			"@cf/meta/llama-4-scout-17b-16e-instruct",
 		]);
 		expect(gateway.calls.every((c) => !("stream_options" in c.body))).toBe(true);
+	});
+});
+
+describe("the Gateway's default model (AI_PROVIDER empty)", () => {
+	const notConfigured = () =>
+		refusal(
+			"ai_default_not_configured",
+			503,
+			"No default model provider is configured: the gateway needs OPENROUTER_API_KEY (or run everyapp ai default <provider>).",
+		);
+
+	it("run() posts to /api/ai/default/v1/chat/completions with model \"default\" for upstream's Workers AI ids, attributed, with no key", async () => {
+		const gateway = fakeGateway(() => completion("NO"));
+		const ai = gatewayAi(byDefault({ EVERY_APP_GATEWAY: gateway.binding }), { background: true, organizationId: "org-1" });
+		for (const model of ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/meta/llama-4-scout-17b-16e-instruct"]) {
+			expect(await ai.run(model as never, { messages: chat, max_tokens: 10, temperature: 0 } as never)).toEqual({ response: "NO" });
+		}
+		for (const call of gateway.calls) {
+			expect(call.url).toBe("http://every-app-gateway.internal/api/ai/default/v1/chat/completions");
+			expect(call.body).toEqual({ model: "default", messages: chat, max_tokens: 10, temperature: 0 });
+			expect(call.headers.get("authorization")).toBeNull();
+			expect(call.headers.get("x-everyapp-org")).toBe("org-1");
+		}
+	});
+
+	it("an id that isn't Workers AI's is sent as it is (the operator's provider must serve it)", async () => {
+		const gateway = fakeGateway(() => completion("ok"));
+		const e = byDefault({ EVERY_APP_GATEWAY: gateway.binding, AGENT_MODEL: " anthropic/claude-sonnet-5.5 " });
+		expect(agentModelId(e)).toBe("anthropic/claude-sonnet-5.5");
+		expect(agentModelId(byDefault({ AGENT_MODEL: "@cf/moonshotai/kimi-k2.6" }))).toBe("default");
+		await gatewayAi(e).run("meta-llama/llama-4-scout" as never, { messages: chat } as never);
+		expect(gateway.calls[0]!.body.model).toBe("meta-llama/llama-4-scout");
+	});
+
+	it("an ai_default_not_configured refusal becomes the sentence naming one provider's key and ai default, which the auto-draft skip shows as is", async () => {
+		const gateway = fakeGateway(notConfigured);
+		const e = byDefault({ EVERY_APP_GATEWAY: gateway.binding });
+		const ai = gatewayAi(e);
+		const sentence =
+			"AI isn't set up on this gateway yet. An admin sets one model provider's key (OpenRouter first): `pnpm everyapp secret set OPENROUTER_API_KEY`, or picks one with `pnpm everyapp ai default <provider>`.";
+		expect(aiProviderNotSetUpMessage(e)).toBe(sentence);
+		await expect(ai.run("@cf/meta/llama-3.1-8b-instruct-fast" as never, { messages: chat } as never)).rejects.toThrow(sentence);
+		expect(await isPromptInjection(ai, "A perfectly normal email body.")).toBe(true);
+		expect(aiFailureOf(ai)).toBe(sentence);
+		expect(scanFailureReason(e, aiFailureOf(ai)!)).toBe(sentence);
+	});
+
+	it("the agent's tool loop: draft_reply, its result sent back, then the answer, all on the default route", async () => {
+		const id = "gen-d";
+		const gateway = fakeGateway(
+			() =>
+				openAiStream([
+					{ id, choices: [{ index: 0, delta: { role: "assistant", content: "" } }] },
+					{ id, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "draft_reply", arguments: '{"originalEmailId":"e-1","to":"alice@example.org","subject":"Re: Lunch","body":"Yes."}' } }] } }] },
+					{ id, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+				]),
+			() =>
+				openAiStream([
+					{ id, choices: [{ index: 0, delta: { role: "assistant", content: "Drafted." } }] },
+					{ id, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+				]),
+		);
+		const out = await draftReplyLoop(byDefault({ EVERY_APP_GATEWAY: gateway.binding }));
+		expect(out.errors).toEqual([]);
+		expect(out.executed).toEqual([{ originalEmailId: "e-1", to: "alice@example.org", subject: "Re: Lunch", body: "Yes." }]);
+		expect(out.text).toBe("Drafted.");
+		expect(gateway.calls.map((c) => new URL(c.url).pathname)).toEqual([
+			"/api/ai/default/v1/chat/completions",
+			"/api/ai/default/v1/chat/completions",
+		]);
+		expect(gateway.calls.map((c) => c.body.model)).toEqual(["default", "default"]);
+	});
+
+	it("chatReply(): ai_default_not_configured mid-stream is the chat's sentence, not the raw refusal", async () => {
+		const gateway = fakeGateway(notConfigured);
+		const e = byDefault({ EVERY_APP_GATEWAY: gateway.binding });
+		const result = streamText({ model: gatewayModel(e).chatModel(agentModelId(e)), prompt: "hi", maxRetries: 0, onError: () => {} });
+		const chunks = await uiChunks(chatReply(result.toUIMessageStream({ onError: (error) => aiFailureMessage(e, error) })));
+		expect(chunks.some((c) => c.type === "error")).toBe(false);
+		expect(shownText(chunks)).toBe(`⚠️ AI isn't set up on this gateway yet, so I can't help with this inbox. ${DEFAULT_SETUP_STEP}`);
+	});
+
+	it("aiSetupProblem(): a binding is none; in development the default names no setting of its own, and nothing set at all is the configuration message", () => {
+		expect(aiSetupProblem(byDefault({ EVERY_APP_GATEWAY: fakeGateway().binding }))).toBeNull();
+		expect(aiSetupProblem(byDefault({ EVERYAPP_DEV: "1", OPENROUTER_API_KEY: "k" }))).toBeNull();
+		expect(aiSetupProblem(byDefault({ EVERYAPP_DEV: "1" }))).toBe(aiNotSetUpMessage(byDefault()));
+		expect(aiNotSetUpMessage(byDefault())).toBe(
+			"AI isn't set up on this gateway (a model provider's key, OpenRouter's first) or in .dev.vars (OPENROUTER_API_KEY, or another model provider's key).",
+		);
 	});
 });
 

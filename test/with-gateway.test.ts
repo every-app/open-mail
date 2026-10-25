@@ -70,6 +70,14 @@ describe("withGateway", () => {
 		expect((gateway.calls[0]!.body as { model: string }).model).toBe("meta-llama/llama-4-scout");
 	});
 
+	it("AI.run() on a Worker built with no AI_PROVIDER goes to the Gateway's default route with model \"default\"", async () => {
+		const gateway = fakeGateway({ body: { choices: [{ message: { content: "NO" } }] } });
+		const { AI } = withGateway(env({ AI_PROVIDER: "", EVERY_APP_GATEWAY: gateway.binding }));
+		expect(await AI.run("@cf/meta/llama-3.1-8b-instruct-fast" as never, { messages: [] } as never)).toEqual({ response: "NO" });
+		expect(gateway.calls[0]!.url).toBe("http://every-app-gateway.internal/api/ai/default/v1/chat/completions");
+		expect((gateway.calls[0]!.body as { model: string }).model).toBe("default");
+	});
+
 	it("AI.run() without a gateway or a dev key fails the call, not the request", async () => {
 		const { AI } = withGateway(env({ EVERYAPP_DEV: "1" }));
 		await expect(AI.run("@cf/meta/llama-3.1-8b-instruct-fast" as never, { messages: [] } as never)).rejects.toThrow(

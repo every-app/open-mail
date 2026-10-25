@@ -15,34 +15,22 @@ export default {
     ],
   },
   // Model calls go through the gateway's AI proxy (workers/everyapp/gateway.ts).
-  // The Worker picks its provider when it is built (AI_PROVIDER in
-  // cloudflare.config.ts). OpenRouter, the provider the gateway holds a key
-  // for, is required (the gateway doesn't open the app until its key is set);
-  // Workers AI is optional (a Worker built with it and no token says in the
-  // chat what is missing). The build still defaults to workers-ai until its
-  // own PR flips it, so a redeploy passes AI_PROVIDER=openrouter meanwhile.
-  // They become one any-of group once the gateway tells apps which providers
-  // are set.
-  providers: [
-    {
-      id: "openrouter",
-      why: "The inbox agent's model, with the prompt-injection scanner and the draft verifier, for a Worker deployed with AI_PROVIDER=openrouter.",
-    },
-    {
-      id: "workers-ai",
-      optional: true,
-      why: "Used by a Worker built with the default AI_PROVIDER=workers-ai instead of OpenRouter.",
-    },
-  ],
-  // The model ids the gateway accepts from this app (it refuses any other
-  // with model_not_allowed). Workers AI (AI_PROVIDER=workers-ai): the agent's
-  // default and the draft verifier, the prompt-injection scanner, and
-  // kimi-k2.6 for AGENT_MODEL (paid-only, 20 requests a minute per account,
-  // shared by every organization on the gateway; the deprecated kimi-k2.5 id
-  // is sent as k2.6). OpenRouter (AI_PROVIDER=openrouter): the same three,
-  // plus claude-haiku-5.5, its agent model (Scout wrote draft_reply calls
-  // out as text, which became the draft).
+  // By default the app takes the Gateway's default model (`ai.chat`): the
+  // operator's choice, else the first provider whose key is set (OpenRouter,
+  // Workers AI, OpenAI, Anthropic, Groq, Mistral, Gemini). The gateway
+  // doesn't open the app until one is set up.
   ai: {
+    chat: {
+      why: "The inbox agent's model, with the prompt-injection scanner and the draft verifier.",
+    },
+    // The model ids the gateway accepts from a pinned Worker (it refuses any
+    // other with model_not_allowed); the default route doesn't read this
+    // list, the operator chose the model. Workers AI (AI_PROVIDER=workers-ai):
+    // the agent's default and the draft verifier, the prompt-injection
+    // scanner, and kimi-k2.6 for AGENT_MODEL (paid-only, 20 requests a minute
+    // per account; the deprecated kimi-k2.5 id is sent as k2.6). OpenRouter
+    // (AI_PROVIDER=openrouter): the same three, plus claude-haiku-5.5, its
+    // agent model (Scout wrote draft_reply calls out as text).
     models: [
       "@cf/meta/llama-4-scout-17b-16e-instruct",
       "@cf/meta/llama-3.1-8b-instruct-fast",
@@ -53,6 +41,22 @@ export default {
       "moonshotai/kimi-k2.6",
     ],
   },
+  // The pins, both optional: a Worker built with AI_PROVIDER=openrouter or
+  // workers-ai calls that provider's own route, which the gateway serves
+  // only to an app that lists it. Nobody needs to set either for the
+  // default.
+  providers: [
+    {
+      id: "openrouter",
+      optional: true,
+      why: "Only for a Worker built with AI_PROVIDER=openrouter (a pin); the default model needs no provider of its own.",
+    },
+    {
+      id: "workers-ai",
+      optional: true,
+      why: "Only for a Worker built with AI_PROVIDER=workers-ai (a pin); the default model needs no provider of its own.",
+    },
+  ],
   // Configure this installation's addresses with `everyapp email set
   // --sender <pattern> --inbound <address>` after its first deploy.
   capabilities: {

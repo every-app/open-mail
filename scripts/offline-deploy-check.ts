@@ -101,12 +101,18 @@ try {
 	if (releaseJson.status !== 0) throw new Error(`tar couldn't read release.json: ${releaseJson.stderr}`);
 	const release = JSON.parse(releaseJson.stdout) as {
 		appId: string;
-		manifest: { id: string; resources?: { durableObjects?: { className: string }[] }; email?: { inbound?: boolean } };
+		manifest: {
+			id: string;
+			resources?: { durableObjects?: { className: string }[] };
+			email?: { inbound?: boolean };
+			ai?: { chat?: unknown };
+		};
 	};
 	const manifest = release.manifest;
 	const durableObjects = (manifest.resources?.durableObjects ?? []).map((d) => d.className);
 	check(release.appId === "agentic-inbox" && manifest.id === "agentic-inbox", "manifest validates strictly (id agentic-inbox)", { appId: release.appId, id: manifest.id });
 	check(manifest.email?.inbound === true, "email.inbound declares the Worker's email handler", manifest.email?.inbound);
+	check(manifest.ai?.chat !== undefined, "ai.chat asks for the Gateway's default model", manifest.ai);
 
 	const config = JSON.parse(fs.readFileSync(workerConfigPath, "utf8")) as {
 		name?: string;
@@ -137,7 +143,7 @@ try {
 	check(refusedKinds.length === 0, "no AI or send-email binding", refusedKinds);
 	check((config.compatibilityFlags ?? []).includes("nodejs_compat"), "compatibilityFlags has nodejs_compat", config.compatibilityFlags);
 	check(env["EMAIL_ADDRESSES"]?.type === "json" && JSON.stringify(env["EMAIL_ADDRESSES"].value) === "[]", "EMAIL_ADDRESSES is []", env["EMAIL_ADDRESSES"]);
-	check(env["AI_PROVIDER"]?.type === "text" && env["AI_PROVIDER"].value === "workers-ai", "AI_PROVIDER defaults to workers-ai", env["AI_PROVIDER"]);
+	check(env["AI_PROVIDER"]?.type === "text" && env["AI_PROVIDER"].value === "", "AI_PROVIDER defaults to empty (the Gateway's default model)", env["AI_PROVIDER"]);
 	const secrets = Object.entries(env).filter(([, b]) => b.type === "secret").map(([name]) => name).sort();
 	check(JSON.stringify(secrets) === JSON.stringify(["EVERY_APP_ORG_ID", "GATEWAY_URL"]), "the only secrets are the platform's (GATEWAY_URL, EVERY_APP_ORG_ID)", secrets);
 } catch (error) {

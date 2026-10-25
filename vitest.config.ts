@@ -77,7 +77,7 @@ export default defineConfig({
                 bindings: {
                   DOMAINS: "example.com",
                   EMAIL_ADDRESSES: [],
-                  AI_PROVIDER: "workers-ai",
+                  AI_PROVIDER: "",
                   AGENT_MODEL: "",
                   EVERYAPP_APP_ID: manifest.id,
                   EVERYAPP_AUDIENCE: `every-acme-${manifest.id}`,

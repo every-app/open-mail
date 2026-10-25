@@ -2,17 +2,24 @@
 # Deployed, the app has no secrets: the gateway holds every key.
 #
 # AI: the app calls models through the gateway's AI proxy. With no gateway in
-# development, one provider key here is used directly (billed to you).
+# development, the SDK calls a provider directly with a key here (billed to
+# you).
 #
-# Workers AI (the default, AI_PROVIDER=workers-ai): an API token made from the
-# "Workers AI" template (Workers AI Read and Edit) and its account id.
+# The default (AI_PROVIDER unset): the Gateway's default model, which the SDK
+# resolves on this file in the Gateway's order, OpenRouter first. That needs
+# everyapp and @every-app/sdk 0.3.0-rc.2 or later: 0.3.0-rc.1 refuses the
+# manifest's ai.chat and its local fallback doesn't serve the default route,
+# so on rc.1 run with a pin instead (AI_PROVIDER=openrouter pnpm everyapp dev,
+# or AI_PROVIDER=workers-ai) and that provider's key below. A pin works the
+# same on rc.2.
+#
+# OpenRouter: a key from https://openrouter.ai/settings/keys.
+# OPENROUTER_API_KEY=
+#
+# Or Workers AI: an API token made from the "Workers AI" template (Workers AI
+# Read and Edit) and its account id.
 # WORKERS_AI_API_TOKEN=
 # CLOUDFLARE_ACCOUNT_ID=
-#
-# Or OpenRouter, the provider the manifest requires: run with
-# AI_PROVIDER=openrouter in the environment and a key from
-# https://openrouter.ai/settings/keys.
-# OPENROUTER_API_KEY=
 #
 # Email: the SDK checks each send against EVERYAPP_EMAIL_SENDERS and prints
 # it. With all three of EMAIL_REST_API_TOKEN, CLOUDFLARE_ACCOUNT_ID (above)

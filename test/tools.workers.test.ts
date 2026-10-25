@@ -209,9 +209,10 @@ describe("tool calls", () => {
 		const sent = JSON.parse(textOf(answer)) as { status: string; messageId: string };
 		expect(sent.status).toBe("sent");
 
-		expect(gateway.calls.map((c) => c.path)).toEqual(["/api/ai/workers-ai/v1/chat/completions", "/api/integrations/email/send"]);
+		// The Worker's default build (AI_PROVIDER empty): the Gateway's default model.
+		expect(gateway.calls.map((c) => c.path)).toEqual(["/api/ai/default/v1/chat/completions", "/api/integrations/email/send"]);
 		for (const call of gateway.calls) expect(call.identity).toBe(answer.identity);
-		expect(gateway.calls[0]!.body).toMatchObject({ model: "@cf/meta/llama-4-scout-17b-16e-instruct", max_tokens: 1024 });
+		expect(gateway.calls[0]!.body).toMatchObject({ model: "default", max_tokens: 1024 });
 		expect(gateway.calls[1]!.body).toMatchObject({
 			from: { address },
 			to: "alice@example.org",
@@ -268,7 +269,7 @@ describe("tool calls", () => {
 		);
 		const draft = JSON.parse(textOf(answer)) as { status: string; draftId: string };
 		expect(draft.status).toBe("draft_saved");
-		expect(gateway.calls.map((c) => c.path)).toEqual(["/api/ai/workers-ai/v1/chat/completions"]);
+		expect(gateway.calls.map((c) => c.path)).toEqual(["/api/ai/default/v1/chat/completions"]);
 		const drafts = (await mailbox(address).getEmails({ folder: Folders.DRAFT })) as { id: string; thread_id: string }[];
 		expect(drafts.map((d) => [d.id, d.thread_id])).toEqual([[draft.draftId, original]]);
 	});

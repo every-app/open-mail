@@ -28,12 +28,28 @@ import { gatewayEmail } from "./email";
 const GATEWAY = "http://every-app-gateway.internal";
 
 /**
- * The gateway's AI providers this app uses: where each one's
+ * Where the app's model calls go: the Gateway's default model provider
+ * unless the Worker was built with a pin (AI_PROVIDER). For each, where its
  * OpenAI-compatible API sits behind the gateway, the settings it needs (the
  * gateway's secrets, under the same names in `.dev.vars` for local
- * development), and each one's model ids.
+ * development), and the model ids the app sends.
  */
 export const PROVIDERS = {
+	// The Gateway's default (`ai.chat` in the manifest): the operator's choice
+	// (`everyapp ai default <provider>`), else the first of OpenRouter, Workers
+	// AI, OpenAI, Anthropic, Groq, Mistral and Gemini whose key is set. The
+	// Gateway decides, so the app names no setting, and "default" as the
+	// model is the operator's model, filled in by the Gateway.
+	default: {
+		base: `${GATEWAY}/api/ai/default/v1`,
+		settings: [],
+		scanner: "default",
+		verifier: "default",
+		agent: "default",
+	},
+	// Pins, for an operator who wants one provider (AI_PROVIDER=workers-ai or
+	// openrouter when the Worker is built), or a developer who wants
+	// `everyapp dev` to call one provider directly.
 	"workers-ai": {
 		base: `${GATEWAY}/api/ai/workers-ai/v1`,
 		settings: ["WORKERS_AI_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"],
@@ -56,9 +72,16 @@ export const PROVIDERS = {
 
 type ProviderEnv = Pick<Cloudflare.Env, "AI_PROVIDER" | "AGENT_MODEL">;
 
-/** The provider id AI_PROVIDER selects; Workers AI unless it says "openrouter". */
-export function providerIdOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">): keyof typeof PROVIDERS {
-	return env.AI_PROVIDER === "openrouter" ? "openrouter" : "workers-ai";
+export type ProviderId = keyof typeof PROVIDERS;
+
+/**
+ * The provider id AI_PROVIDER selects: the pin when it names one
+ * ("openrouter" or "workers-ai"), else (empty, unset, anything else) the
+ * Gateway's default.
+ */
+export function providerIdOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">): ProviderId {
+	const pin = env.AI_PROVIDER?.trim();
+	return pin === "openrouter" || pin === "workers-ai" ? pin : "default";
 }
 
 /** The provider AI_PROVIDER selects. */
@@ -67,26 +90,46 @@ export function providerOf(env: Pick<Cloudflare.Env, "AI_PROVIDER">) {
 }
 
 /**
+ * The step on the default route: any one model provider's key (OpenRouter's
+ * first, as the Gateway's order and its setup ask), or the operator's pick.
+ */
+export const DEFAULT_SETUP_STEP =
+	"An admin sets one model provider's key (OpenRouter first): `pnpm everyapp secret set OPENROUTER_API_KEY`, or picks one with `pnpm everyapp ai default <provider>`.";
+
+/**
  * The step that sets the selected provider's key on the gateway, which every
  * "AI isn't set up" sentence ends with: the key's name and the command that
- * sets it. Nothing else: switching providers is a redeploy with the other
- * AI_PROVIDER (read when the Worker is built), which is the operator's
- * business and docs/EVERY_APP.md's to say, not a sentence a member reads.
+ * sets it (on the default route, DEFAULT_SETUP_STEP). Nothing else: pinning
+ * a provider is a redeploy with AI_PROVIDER (read when the Worker is built),
+ * which is the operator's business and docs/EVERY_APP.md's to say, not a
+ * sentence a member reads.
  */
 export function aiProviderSetupStep(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
-	const name = providerOf(env).settings[0];
+	const id = providerIdOf(env);
+	if (id === "default") return DEFAULT_SETUP_STEP;
+	const name = PROVIDERS[id].settings[0];
 	return `An admin sets ${name} with \`pnpm everyapp secret set ${name}\`.`;
 }
 
 /**
+ * The gateway's refusals that mean no model is set up for this call: the
+ * pinned provider's key isn't set (`ai_provider_not_configured`), or the
+ * default resolves to nothing configured (`ai_default_not_configured`).
+ */
+export function isNotConfigured(code: string | undefined): boolean {
+	return code === "ai_provider_not_configured" || code === "ai_default_not_configured";
+}
+
+/**
  * What a person reads when the gateway refuses a model call with
- * `ai_provider_not_configured`: the selected provider's key isn't set on the
- * gateway. One plain sentence, then the step. The manifest requires
- * OPENROUTER_API_KEY, so the gateway doesn't open the app before it is set;
- * this is what a Worker built with the default AI_PROVIDER=workers-ai says
- * while WORKERS_AI_API_TOKEN is missing. The auto-draft skip shows it as is
- * ("No draft for this email: …"); the chat says what it can't do first
- * (aiFailureMessage()).
+ * `ai_default_not_configured` (no model provider's key is set, or the
+ * operator's pick isn't) or `ai_provider_not_configured` (a pinned
+ * provider's key isn't set). One plain sentence, then the step. The
+ * manifest's `ai.chat` keeps the app shut until a provider is set up, so
+ * this is mostly what a Worker says when a key is unset later, or when it is
+ * pinned to a provider whose key the gateway doesn't hold. The auto-draft
+ * skip shows it as is ("No draft for this email: …"); the chat says what it
+ * can't do first (aiFailureMessage()).
  */
 export function aiProviderNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): string {
 	return `AI isn't set up on this gateway yet. ${aiProviderSetupStep(env)}`;
@@ -111,12 +154,18 @@ const OPENROUTER_MODELS: Record<string, string> = {
 
 /**
  * The id to send for `model`. Upstream's code (lib/ai.ts) and AGENT_MODEL may
- * name Workers AI models; with AI_PROVIDER=openrouter they become
- * OpenRouter's ids for the same models. Any other id is sent as it is (the manifest's
- * `ai.models` decides whether the gateway accepts it).
+ * name Workers AI models. On the default route those become "default" (the
+ * operator's model: the default may be any provider, and few serve `@cf/`
+ * ids), and any other id is sent as it is (the operator's provider must
+ * serve it). Pinned to OpenRouter they become OpenRouter's ids for the same
+ * models. On a pin, any other id is sent as it is (the manifest's
+ * `ai.models` decides whether the gateway accepts it; the default route
+ * doesn't read that list).
  */
 export function mapModel(env: Pick<Cloudflare.Env, "AI_PROVIDER">, model: string): string {
-	const models = providerIdOf(env) === "openrouter" ? OPENROUTER_MODELS : WORKERS_AI_MODELS;
+	const id = providerIdOf(env);
+	if (id === "default") return model.startsWith("@cf/") ? "default" : model;
+	const models = id === "openrouter" ? OPENROUTER_MODELS : WORKERS_AI_MODELS;
 	return models[model] ?? model;
 }
 
@@ -145,9 +194,9 @@ export function aiFailureOf(ai: Ai): string | undefined {
  * completion through the gateway. Never sends `stream_options` (Workers AI
  * answers 400 on a non-streaming call that carries it). Throws on any
  * failure, as a binding's `run()` does, with the gateway's refusal (code and
- * message) when the gateway refused the call, or, when the provider's key
- * isn't set on the gateway (`ai_provider_not_configured`), the sentence that
- * names the key to set: the agent shows it where it skips an auto-draft.
+ * message) when the gateway refused the call, or, when no model is set up on
+ * the gateway (isNotConfigured()), the sentence that names the key to set:
+ * the agent shows it where it skips an auto-draft.
  */
 export function gatewayAi(env: Cloudflare.Env, target?: GatewayCallFor): Ai {
 	const provider = providerOf(env);
@@ -172,7 +221,7 @@ export function gatewayAi(env: Cloudflare.Env, target?: GatewayCallFor): Ai {
 				});
 				if (!res.ok) {
 					const refusal = await gatewayRefusal(res.clone());
-					if (refusal?.code === "ai_provider_not_configured") throw new Error(aiProviderNotSetUpMessage(env));
+					if (isNotConfigured(refusal?.code)) throw new Error(aiProviderNotSetUpMessage(env));
 					throw new Error(
 						refusal
 							? `ai ${res.status} ${refusal.code}: ${refusal.message}`
@@ -211,7 +260,10 @@ export function gatewayModel(env: Cloudflare.Env, target?: GatewayCallFor) {
 	});
 }
 
-/** The agent's model: AGENT_MODEL, else the provider's default, as the provider names it. */
+/**
+ * The agent's model: AGENT_MODEL, else the provider's default, as the
+ * provider names it ("default" on the default route: the operator's model).
+ */
 export function agentModelId(env: ProviderEnv): string {
 	return mapModel(env, env.AGENT_MODEL?.trim() || providerOf(env).agent);
 }
