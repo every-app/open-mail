@@ -1,8 +1,6 @@
 # Agentic Inbox on Every App
 
-This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) as a private app behind an [Every App](https://github.com/every-app/private-every-app) gateway. It deploys as one Worker, `every-<orgKey>-agentic-inbox`, which the gateway reaches over a service binding. The Worker has no workers.dev URL, no routes and no app secrets. The gateway signs people in, brokers the model calls (the Gateway's default model provider, which its operator picks, or a pinned OpenRouter or Workers AI), sends the mail, and serves the MCP tools.
-
-> **Status (2026-10-24).** Deployed: the app is live at `https://agentic-inbox.everyapp.team/` with mail on `hi.openseo.so`, its senders set with `pnpm everyapp email set --sender`.
+This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) as a private app behind an [Every App](https://github.com/every-app/every-app) gateway. It deploys as one Worker, `every-<orgKey>-agentic-inbox`, which the gateway reaches over a service binding. The Worker has no workers.dev URL, no routes and no app secrets. The gateway signs people in, brokers the model calls (the Gateway's default model provider, which its operator picks, or a pinned OpenRouter or Workers AI), sends the mail, and serves the MCP tools.
 
 ## What changes from upstream
 
@@ -244,7 +242,7 @@ The Worker picks between the default and a pin when it is built (`AI_PROVIDER`);
 
 ### Steps
 
-These steps assume a gateway installed with `pnpm everyapp setup` from the platform checkout (`~/workspaces/private-every-app`, or wherever yours is). Run `pnpm everyapp …` gateway commands from that checkout, and app commands and `pnpm exec cf …` from this directory (it has `cf`; the platform checkout's root doesn't). The account must be on **Workers Paid**: Every App needs it (`everyapp setup` checks), and so do Email Sending to arbitrary recipients and Email Routing to Workers. The steps are in order. The codes in capitals are the CLI's: `--json` prints them in its events, and a terminal shows the sentence that goes with them.
+These steps assume a gateway installed with `pnpm everyapp setup` from the platform checkout (your clone of [every-app/every-app](https://github.com/every-app/every-app), wherever it is). Run `pnpm everyapp …` gateway commands from that checkout, and app commands and `pnpm exec cf …` from this directory (it has `cf`; the platform checkout's root doesn't). The account must be on **Workers Paid**: Every App needs it (`everyapp setup` checks), and so do Email Sending to arbitrary recipients and Email Routing to Workers. The steps are in order. The codes in capitals are the CLI's: `--json` prints them in its events, and a terminal shows the sentence that goes with them.
 
 | # | Where | What | Command / step | Needs |
 | --- | --- | --- | --- | --- |
