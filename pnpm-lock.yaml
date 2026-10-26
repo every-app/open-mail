@@ -46,7 +46,7 @@ importers:
         version: 1.13.1(@phosphor-icons/react@2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@types/react@19.2.14)(echarts@6.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@3.25.76)
       '@every-app/sdk':
         specifier: 0.3.0-rc.3
-        version: 0.3.0-rc.3(jose@6.2.1)
+        version: 0.3.0-rc.3(jose@6.2.13)
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -98,6 +98,9 @@ importers:
       isbot:
         specifier: ^5.1.27
         version: 5.1.36
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.13
       postal-mime:
         specifier: ^2.6.1
         version: 2.7.3
@@ -2696,8 +2699,8 @@ packages:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
 
-  jose@6.2.1:
-    resolution: {integrity: sha512-jUaKr1yrbfaImV7R2TN/b3IcZzsw38/chqMpo2XJ7i2F8AfM/lA4G1goC3JVEwg0H7UldTmSt3P68nt31W7/mw==}
+  jose@6.2.13:
+    resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
   js-base64@3.7.8:
     resolution: {integrity: sha512-hNngCeKxIUQiEUN3GPJOkz4wF/YvdUdbNL9hsBcMQTkKzboD7T/q3OYOuuPZLUE6dBxSGpwhk5mwuDud7JVAow==}
@@ -4447,9 +4450,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@every-app/sdk@0.3.0-rc.3(jose@6.2.1)':
+  '@every-app/sdk@0.3.0-rc.3(jose@6.2.13)':
     dependencies:
-      jose: 6.2.1
+      jose: 6.2.13
 
   '@floating-ui/core@1.7.5':
     dependencies:
@@ -4832,7 +4835,7 @@ snapshots:
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
       hono: 4.12.8
-      jose: 6.2.1
+      jose: 6.2.13
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -6063,7 +6066,7 @@ snapshots:
 
   jiti@2.6.1: {}
 
-  jose@6.2.1: {}
+  jose@6.2.13: {}
 
   js-base64@3.7.8: {}
 
