@@ -13,7 +13,7 @@ import worker from "../workers/app";
 
 const ISSUER = env.EVERYAPP_IDENTITY_ISSUER as string;
 const AUDIENCE = env.EVERYAPP_AUDIENCE as string;
-const ORIGIN = "https://agentic-inbox.gateway.example.com";
+const ORIGIN = "https://openmail.gateway.example.com";
 const ORG = "org-1";
 
 afterEach(() => vi.restoreAllMocks());

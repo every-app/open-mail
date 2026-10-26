@@ -4,7 +4,7 @@
  *
  * The app never speaks MCP. The gateway snapshots this catalog at deploy and
  * serves it on its own `/mcp` (one connector for every app, names prefixed
- * `agentic-inbox_`) and on the app's host `/mcp`. It signs the caller in
+ * `openmail_`) and on the app's host `/mcp`. It signs the caller in
  * (OAuth or a personal access token), applies the connection's read-only or
  * read-write choice, hides `destructive` tools until approvals exist, and
  * calls a tool here over the internal tools contract with an identity minted
@@ -114,7 +114,7 @@ export function withinCallBudget(ai: Ai): Ai {
 			const asked = inputs.messages?.filter((m) => m.role === "user").map((m) => String(m.content ?? "")).join("\n") ?? "";
 			if (estimatedTokens(asked) > MAX_VERIFIED_TOKENS) {
 				console.warn(
-					`[agentic-inbox] tool call: ${model} skipped, the text is too long to check within a tool call's time (${asked.length} characters)`,
+					`[openmail] tool call: ${model} skipped, the text is too long to check within a tool call's time (${asked.length} characters)`,
 				);
 				return { response: "" };
 			}

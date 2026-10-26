@@ -3,7 +3,7 @@
 // `everyapp dev`'s gateway-lite:
 //   node scripts/chat-probe.mjs <ws url> <host header> <origin> "<message>"
 // e.g. node scripts/chat-probe.mjs ws://127.0.0.1:8787/agents/email-agent/dev@example.com \
-//        agentic-inbox.localhost:8787 http://agentic-inbox.localhost:8787 "Any unread emails?"
+//        openmail.localhost:8787 http://openmail.localhost:8787 "Any unread emails?"
 // Prints the reply's text and tool calls. Exit 0 when the reply finished
 // without a stream error, 1 otherwise.
 import WebSocket from "ws";

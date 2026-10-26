@@ -195,7 +195,7 @@ describe("gatewayEmail: the SDK's sendEmail over the EVERY_APP_GATEWAY binding",
 
 	it("posts the mapped message to /api/integrations/email/send, attributed to the request's person", async () => {
 		const gateway = fakeGateway(() => Response.json({ messageId: "<gw-1@example.com>", status: "delivered" }));
-		const request = new Request("https://agentic-inbox.example.com/api/v1/mailboxes/x/emails", {
+		const request = new Request("https://openmail.example.com/api/v1/mailboxes/x/emails", {
 			headers: { "x-everyapp-identity": "token-of-the-person", "x-everyapp-org": "forged-by-the-app" },
 		});
 		const sent = await gatewayEmail(env({ EVERY_APP_GATEWAY: gateway.binding }), request).send(message);

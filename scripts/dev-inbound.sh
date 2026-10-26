@@ -32,7 +32,7 @@ STAMP="$(date +%s)-$$"
 SUBJECT="Question about my order ($STAMP)"
 
 if [ -n "$GW_PORT" ]; then
-	HOST="agentic-inbox.localhost:${GW_PORT}"
+	HOST="openmail.localhost:${GW_PORT}"
 	U="http://${HOST}"
 	R=(--resolve "${HOST}:127.0.0.1" --max-time 60 -s)
 	code=$(curl "${R[@]}" -H "Origin: ${U}" -X POST -H 'content-type: application/json' \

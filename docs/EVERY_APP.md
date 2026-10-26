@@ -1,6 +1,6 @@
-# Agentic Inbox on Every App
+# OpenMail on Every App
 
-This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) as a private app behind an [Every App](https://github.com/every-app/every-app) gateway. It deploys as one Worker, `every-<orgKey>-agentic-inbox`, which the gateway reaches over a service binding. The Worker has no workers.dev URL, no routes and no app secrets. The gateway signs people in, brokers the model calls (the Gateway's default model provider, which its operator picks, or a pinned OpenRouter or Workers AI), sends the mail, and serves the MCP tools.
+This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) as a private app behind an [Every App](https://github.com/every-app/every-app) gateway. It deploys as one Worker, `every-<orgKey>-openmail`, which the gateway reaches over a service binding. The Worker has no workers.dev URL, no routes and no app secrets. The gateway signs people in, brokers the model calls (the Gateway's default model provider, which its operator picks, or a pinned OpenRouter or Workers AI), sends the mail, and serves the MCP tools.
 
 ## What changes from upstream
 
@@ -10,7 +10,7 @@ This fork runs [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-
 | Who may do what | Everyone Access lets in can do everything | The organization is the boundary. Owners and admins create and delete mailboxes and edit settings, including the agent's system prompt. Members read, search, draft, reply, forward, send, move and star. There are no per-mailbox permissions |
 | Workers AI | `ai` binding with `workers-ai-provider`, model `@cf/moonshotai/kimi-k2.5` | The gateway's AI proxy. By default the Gateway's default model (`ai: { chat }` in the manifest, the route `/api/ai/default/v1`): the operator's choice (`pnpm everyapp ai default <provider>`), else the first provider whose key the gateway holds (OpenRouter, Workers AI, OpenAI, Anthropic, Groq, Mistral, Gemini), with the operator's model. `AI_PROVIDER=openrouter` or `workers-ai` at build time pins that provider instead (both optional in the manifest, "Settings" under "Deploy it"). `AGENT_MODEL` picks the agent's model (default: the operator's model on the default route, `@cf/meta/llama-4-scout-17b-16e-instruct` pinned to Workers AI, `anthropic/claude-haiku-5.5` pinned to OpenRouter) |
 | Sending mail | `send_email` binding, any address on `DOMAINS`, answered `202` before the send | The gateway `email` capability, from the mailbox's own address on a domain the manifest declares (`capabilities.email.senders`). The send is awaited: a refusal answers `502` with the gateway's code, and nothing is copied to Sent |
-| Receiving mail | Email Routing catch-all rule "Send to a Worker", made by hand | The same `email()` handler. `everyapp deploy` creates the Email Routing catch-all (or a rule per address) naming `every-<orgKey>-agentic-inbox` from the manifest's `email.inbound`, and deletes the ones the manifest drops |
+| Receiving mail | Email Routing catch-all rule "Send to a Worker", made by hand | The same `email()` handler. `everyapp deploy` creates the Email Routing catch-all (or a rule per address) naming `every-<orgKey>-openmail` from the manifest's `email.inbound`, and deletes the ones the manifest drops |
 | Storage | R2 bucket `agentic-inbox`, two SQLite Durable Objects | The R2 bucket is named after the Worker and created by the deploy. The Durable Objects (`MailboxDO`, `EmailAgent`) and every R2 key are unchanged |
 | MCP | The app's own `/mcp` (`EmailMCP`) behind Access | The gateway's MCP connector serves the app's `defineTools()` catalog: 13 tools, with `delete_email` hidden from AI clients. The app serves no `/mcp` of its own |
 | Settings | `wrangler.jsonc` vars `DOMAINS`, `EMAIL_ADDRESSES` | `everyapp.config.ts` (the manifest: senders, inbound addresses, models) and `cloudflare.config.ts`. `DOMAINS` comes from the manifest's senders. The `EMAIL_ADDRESSES` restriction is off (`[]`) |
@@ -52,7 +52,7 @@ cp .dev.vars.example .dev.vars    # optional: AI keys, a real mail transport
 pnpm everyapp dev                 # or: pnpm everyapp dev --port 8801
 ```
 
-`everyapp dev` runs the app under `cf dev` on an internal port and puts a gateway-lite in front of it on `http://agentic-inbox.localhost:8787` (or the port you pass). The gateway-lite applies the real perimeter: the header strip and inject, the same-origin check on state-changing requests, the security headers, and an RS256 identity signed with the SDK's dev key. You are its seeded owner, `dev@everyapp.localhost` in `dev-org`. Its `/mcp` serves the app's MCP tools; send any `Authorization: Bearer` value. If `*.localhost` resolves to `::1` on your machine, use `curl --resolve agentic-inbox.localhost:8787:127.0.0.1`, as `scripts/dev-probe.sh` does.
+`everyapp dev` runs the app under `cf dev` on an internal port and puts a gateway-lite in front of it on `http://openmail.localhost:8787` (or the port you pass). The gateway-lite applies the real perimeter: the header strip and inject, the same-origin check on state-changing requests, the security headers, and an RS256 identity signed with the SDK's dev key. You are its seeded owner, `dev@everyapp.localhost` in `dev-org`. Its `/mcp` serves the app's MCP tools; send any `Authorization: Bearer` value. If `*.localhost` resolves to `::1` on your machine, use `curl --resolve openmail.localhost:8787:127.0.0.1`, as `scripts/dev-probe.sh` does.
 
 - **AI.** There is no gateway locally, so the SDK calls a provider directly with your key from `.dev.vars`, billed to you. On the default route it resolves the default on `.dev.vars` in the Gateway's order: set `OPENROUTER_API_KEY` (a key from https://openrouter.ai/settings/keys), or `WORKERS_AI_API_TOKEN` (an API token from the "Workers AI" template: Workers AI Read and Edit) with `CLOUDFLARE_ACCOUNT_ID`, or another provider's key. That needs `everyapp` and `@every-app/sdk` 0.3.0-rc.2 or later: 0.3.0-rc.1 refuses the manifest's `ai.chat` (`ai: Unrecognized key: "chat"`) and its local fallback doesn't serve `/api/ai/default`; on rc.1 the way to call a model in development is a pin, `AI_PROVIDER=openrouter pnpm everyapp dev` (or `AI_PROVIDER=workers-ai`) with that provider's key in `.dev.vars`. A pin works the same on rc.2. Without keys, the chat and the auto-draft show "AI isn't set up" instead of failing the request.
 - **Sending.** The SDK checks each send as the gateway would (the mailbox's address must match the manifest's `senders`), then prints it (`[everyapp dev] email to 1 recipient subject "…"`) unless `EMAIL_REST_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `EMAIL_FROM` are set in `.dev.vars` (the Email Sending REST API, on your account). `GET /api/v1/config` says `ready: false`, and the home page shows "Sending is off until the gateway's email sender is set" (the dev login is an owner), until `EMAIL_FROM` is set.
@@ -101,7 +101,7 @@ The plan's §5.3 checklist, run end to end on 2026-10-17 by the integration lane
 ```
 ######## scripts/dev-probe.sh
 == GET / (SSR through the gateway-lite)
-ok   GET / -> 200 <title>Agentic Inbox</title>
+ok   GET / -> 200 <title>OpenMail</title>
 ok   perimeter header content-security-policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'
 ok   perimeter header x-frame-options: DENY
 ok   perimeter header x-content-type-options: nosniff
@@ -160,7 +160,7 @@ ok   GET /agents/mailbox/dev@example.com -> 404
      chat: {   "reply": "⚠️ AI isn't set up on this gateway (WORKERS_AI_API_TOKEN) or in .dev.vars (WORKERS_AI_API_TOKEN and CLOUDFLARE_ACCOUNT_ID).",   "tools": [],   "error": null } 
 ok   a chat turn finished without a stream error
 ######## MCP: the gateway-lite's /mcp serves the app's defineTools() catalog
-ok   initialize -> every-app-agentic-inbox, protocol 2025-06-18
+ok   initialize -> every-app-openmail, protocol 2025-06-18
 ok   tools/list -> 12 tools, no delete_email: create_draft,draft_reply,get_email,get_thread,list_emails,list_mailboxes,mark_email_read,move_email,search_emails,send_email,send_reply,update_draft
 ok   tools/call list_mailboxes -> includes dev@example.com
 ok   tools/call delete_email -> refused: Unknown tool: delete_email
@@ -170,7 +170,7 @@ ok   direct hit on the Vite port GET /api/v1/me -> 401 {"error":"unauthenticated
 verify-local OK
 ```
 
-The same server in headless Chromium (a Playwright probe outside the repository), with no mocked routes: the home page shows the owner "New mailbox", a "‹ Every App" row above the title linking to `https://gateway.dev.localhost`, the "Email sending isn't set up on this gateway" banner (`ready: false`) and a delete control per mailbox; an inbound `multipart/related` mail with a `cid:` image renders in the sandboxed message iframe as a `data:image/png;base64,…` URL that the page (never the iframe) fetched; the agent panel connects over `ws://` and a chat turn answers "⚠️ AI isn't set up on this gateway (WORKERS_AI_API_TOKEN) …"; the MCP panel shows `https://gateway.dev.localhost/mcp` and `http://agentic-inbox.localhost:8808/mcp` and lists the catalog's tools without `delete_email`; no page errors once Vite had optimised its dependencies.
+The same server in headless Chromium (a Playwright probe outside the repository), with no mocked routes: the home page shows the owner "New mailbox", a "‹ Every App" row above the title linking to `https://gateway.dev.localhost`, the "Email sending isn't set up on this gateway" banner (`ready: false`) and a delete control per mailbox; an inbound `multipart/related` mail with a `cid:` image renders in the sandboxed message iframe as a `data:image/png;base64,…` URL that the page (never the iframe) fetched; the agent panel connects over `ws://` and a chat turn answers "⚠️ AI isn't set up on this gateway (WORKERS_AI_API_TOKEN) …"; the MCP panel shows `https://gateway.dev.localhost/mcp` and `http://openmail.localhost:8808/mcp` and lists the catalog's tools without `delete_email`; no page errors once Vite had optimised its dependencies.
 
 **The agent with a model.** No provider key existed on the porting machine, so the model calls went to a local mock playing the gateway's AI proxy (an OpenAI-compatible responder), wired in by a temporary change to `withGateway()` that gave the dev env an `EVERY_APP_GATEWAY` forwarding to it; the change was reverted and never committed. With `AI_PROVIDER=openrouter pnpm everyapp dev --port 8808`, everything else real (the Worker, the `EmailAgent` and `MailboxDO` Durable Objects, the SDK's binding path, `streamText`/`generateText`, upstream's tools):
 
@@ -199,13 +199,13 @@ Workers AI's own streaming with tool calls is proven only by the live captures r
 $ everyapp release
   app.install: ok
   app.build: Built the app and checked its Build Output.
-  app.release: Packed agentic-inbox 0.1.0 (a29e694602fa) into …/everyapp-release.tar.gz.
+  app.release: Packed openmail 0.1.0 (a29e694602fa) into …/everyapp-release.tar.gz.
 ok   cf build completes and the deploy policy accepts the Build Output (app.build ok)
 ok   no D1 migrations, or they match the schema (app.schema ok)
 ok   the release is packed (done with version and sha256)
 ok   no warnings from the release
 ok   Build Output is a production build
-ok   manifest validates strictly (id agentic-inbox)
+ok   manifest validates strictly (id openmail)
 ok   email.inbound declares the Worker's email handler
 ok   worker name is the build placeholder every-hosted--sentinel
 ok   exports are the manifest's Durable Objects (MailboxDO, EmailAgent)
@@ -257,15 +257,15 @@ These steps assume a gateway installed with `pnpm everyapp setup` from the platf
 | 8 | Cloudflare zone | Choose a mail domain on Cloudflare DNS in the gateway's account. Email Routing adds and locks its MX and SPF records | `everyapp email set --inbound` offers to enable routing; add `--enable-email-routing` when running unattended | #327 |
 | 9 | this directory | Check the manifest and production build offline. The manifest declares `capabilities.email` and `email: { inbound: true }`; addresses belong to the installation | `pnpm check:deploy` | #325, #327 |
 | 10 | this directory | Deploy, then configure the installation's senders and inbound addresses. Mailbox domains are read from the gateway's configured senders | `pnpm everyapp deploy`, then `pnpm everyapp email set --sender '*@example.com' --inbound '*@example.com'` (replace with your domain; a catch-all requires a zone apex). Use `pnpm everyapp email show` to inspect them | #327 |
-| 11 | Cloudflare zone | Check the inbound routes. A rule you made by hand that already sends to the Worker is adopted and renamed `everyapp:every-<orgKey>-agentic-inbox` | `pnpm everyapp status` prints `Email:    agentic-inbox: *@<domain>`. If a rule is gone, off or sends elsewhere, its "To do" says `Mail for agentic-inbox doesn't reach it: *@<domain> (…). Run: pnpm everyapp deploy (in agentic-inbox's directory)` (code `EMAIL_ROUTE_MISSING` with `--json`) | #327 |
+| 11 | Cloudflare zone | Check the inbound routes. A rule you made by hand that already sends to the Worker is adopted and renamed `everyapp:every-<orgKey>-openmail` | `pnpm everyapp status` prints `Email:    openmail: *@<domain>`. If a rule is gone, off or sends elsewhere, its "To do" says `Mail for openmail doesn't reach it: *@<domain> (…). Run: pnpm everyapp deploy (in openmail's directory)` (code `EMAIL_ROUTE_MISSING` with `--json`) | #327 |
 | 12 | gateway (optional) | Resend instead of Cloudflare Email Sending: a deployed gateway with `RESEND_API_KEY` sends all its mail through Resend, its own included; `EMAIL_PROVIDER` (`resend` or `cloudflare`, asked at the hidden prompt) pins the choice. Or the Email Sending REST API instead of the gateway's `EMAIL` binding (Docker gateways) | `pnpm everyapp secret set RESEND_API_KEY`, `pnpm everyapp secret set EMAIL_PROVIDER`, or `pnpm everyapp secret set EMAIL_REST_API_TOKEN` | #325, #329 |
 | 13 | this directory | App secrets | **None** | |
 
-Then open `https://agentic-inbox.<gateway domain>/` as an owner or admin and create a mailbox on one of the domains. Send a mail to it from outside and watch the inbox, then Drafts, where the agent's reply appears.
+Then open `https://openmail.<gateway domain>/` as an owner or admin and create a mailbox on one of the domains. Send a mail to it from outside and watch the inbox, then Drafts, where the agent's reply appears.
 
 **Models.** On the default route the scanner, the verifier and the agent send `default`: the operator's model (each provider's own default, OpenRouter's `anthropic/claude-haiku-5.5`, unless `pnpm everyapp ai default <provider>/<model>` names one). `AGENT_MODEL=<id> pnpm everyapp deploy` sends that id for the agent as it is (the default provider must serve it; a Workers AI `@cf/` id becomes `default`). Pinned to OpenRouter the agent uses `anthropic/claude-haiku-5.5`: Llama 4 Scout often wrote its `draft_reply` call out as text, and that text became the draft. The scanner and verifier use `meta-llama/llama-3.1-8b-instruct` and `meta-llama/llama-4-scout`; `AGENT_MODEL=moonshotai/kimi-k2.6` switches the agent's model. Pinned to Workers AI, the scanner, verifier and agent use the Workers AI models (`@cf/meta/llama-3.1-8b-instruct-fast`, `@cf/meta/llama-4-scout-17b-16e-instruct`; `AGENT_MODEL=@cf/moonshotai/kimi-k2.6` for Kimi). Kimi K2.6 on Workers AI (what upstream's deprecated `kimi-k2.5` now aliases to) is paid-only and allows 20 requests a minute per account, shared by every organization on the gateway.
 
-**Redeploying.** Run `pnpm everyapp deploy` again; a redeploy of an app the gateway already serves never touches the gateway. Changing `senders`, `email.inbound`, `AI_PROVIDER` or `AGENT_MODEL` needs a redeploy. `AI_PROVIDER` and `AGENT_MODEL` are read when the Worker is built, so repeat them on every redeploy: one without them goes back to the Gateway's default model. A redeploy deletes the routes of addresses dropped from `email.inbound`, and `pnpm everyapp delete --purge` removes them all, with the Worker; it leaves the R2 bucket `every-<orgKey>-agentic-inbox` (mailbox settings and attachments) in the account. A copy deployed from a build that still had upstream's MCP server has an `EmailMCP` Durable Object class that the catalog removed. Redeploy that copy once with `pnpm everyapp deploy --allow-delete-durable-object-data`; it deletes only the old MCP server's session state.
+**Redeploying.** Run `pnpm everyapp deploy` again; a redeploy of an app the gateway already serves never touches the gateway. Changing `senders`, `email.inbound`, `AI_PROVIDER` or `AGENT_MODEL` needs a redeploy. `AI_PROVIDER` and `AGENT_MODEL` are read when the Worker is built, so repeat them on every redeploy: one without them goes back to the Gateway's default model. A redeploy deletes the routes of addresses dropped from `email.inbound`, and `pnpm everyapp delete --purge` removes them all, with the Worker; it leaves the R2 bucket `every-<orgKey>-openmail` (mailbox settings and attachments) in the account. A copy deployed from a build that still had upstream's MCP server has an `EmailMCP` Durable Object class that the catalog removed. Redeploy that copy once with `pnpm everyapp deploy --allow-delete-durable-object-data`; it deletes only the old MCP server's session state.
 
 **What you don't do:** set any app secret; declare email triggers; bind Workers AI or `send_email` on the app (the deploy refuses both); set up CORS or Cloudflare Access.
 

@@ -4,7 +4,7 @@
 #
 #   bash scripts/dev-probe.sh [gateway port, default 8787] [the app's internal Vite port, printed by everyapp dev]
 #
-# curl resolves agentic-inbox.localhost to 127.0.0.1 itself (--resolve): the
+# curl resolves openmail.localhost to 127.0.0.1 itself (--resolve): the
 # system resolver answers ::1 for *.localhost while the gateway-lite listens
 # on 127.0.0.1. Non-GET requests carry Origin: the perimeter treats a
 # cookieless state-changing request without a same-origin signal as
@@ -12,7 +12,7 @@
 set -u
 GW_PORT="${1:-8787}"
 APP_PORT="${2:-}"
-HOST="agentic-inbox.localhost:${GW_PORT}"
+HOST="openmail.localhost:${GW_PORT}"
 U="http://${HOST}"
 R=(--resolve "${HOST}:127.0.0.1" --max-time 60 -s)
 ORIGIN=(-H "Origin: ${U}")
@@ -26,7 +26,7 @@ fail() { echo "FAIL $*"; FAILS=$((FAILS + 1)); }
 echo "== GET / (SSR through the gateway-lite)"
 code=$(curl "${R[@]}" -D "$TMP/root.h" -o "$TMP/root.html" -w '%{http_code}' "$U/")
 title=$(grep -o '<title>[^<]*</title>' "$TMP/root.html" | head -1)
-[ "$code" = 200 ] && [ "$title" = "<title>Agentic Inbox</title>" ] && pass "GET / -> 200 $title" || fail "GET / -> $code $title"
+[ "$code" = 200 ] && [ "$title" = "<title>OpenMail</title>" ] && pass "GET / -> 200 $title" || fail "GET / -> $code $title"
 for h in content-security-policy x-frame-options x-content-type-options referrer-policy strict-transport-security; do
 	line=$(grep -i "^$h:" "$TMP/root.h" | tr -d '\r')
 	[ -n "$line" ] && pass "perimeter header $line" || fail "missing perimeter header $h"

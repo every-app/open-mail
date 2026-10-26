@@ -22,7 +22,7 @@ set -u
 GW_PORT="${1:?usage: bash scripts/verify-local.sh <gateway port> <app Vite port> [dev server log]}"
 APP_PORT="${2:?usage: bash scripts/verify-local.sh <gateway port> <app Vite port> [dev server log]}"
 DEV_LOG="${3:-}"
-HOST="agentic-inbox.localhost:${GW_PORT}"
+HOST="openmail.localhost:${GW_PORT}"
 U="http://${HOST}"
 D="http://127.0.0.1:${APP_PORT}"
 R=(--resolve "${HOST}:127.0.0.1" --max-time 60 -s)

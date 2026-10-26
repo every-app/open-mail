@@ -4,10 +4,10 @@
 
 import { useEffect } from "react";
 
-const APP_NAME = "Agentic Inbox";
+const APP_NAME = "OpenMail";
 
 /**
- * The browser tab: "Page · Mailbox · Agentic Inbox", the shape the other
+ * The browser tab: "Page · Mailbox · OpenMail", the shape the other
  * Every App apps title theirs with, so two open mailboxes read as two tabs.
  * Empty parts are left out. The Layout's <title> is what shows before this
  * runs.

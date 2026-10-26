@@ -90,7 +90,7 @@ import {
 } from "../workers/everyapp/identity";
 
 // The organization's own copy of the app, as `everyapp deploy` configures it.
-const AUDIENCE = "every-acme-agentic-inbox";
+const AUDIENCE = "every-acme-openmail";
 const ISSUER = "https://apps.example.com";
 const ORG = "org_acme";
 let privateKeyPem: string;
@@ -143,7 +143,7 @@ function makeEnv(extra: Record<string, unknown> = {}) {
 	const bucket = fakeBucket();
 	const agentCalls: string[] = [];
 	const env = {
-		EVERYAPP_APP_ID: "agentic-inbox",
+		EVERYAPP_APP_ID: "openmail",
 		EVERYAPP_AUDIENCE: AUDIENCE,
 		EVERYAPP_IDENTITY_ISSUER: ISSUER,
 		EVERYAPP_IDENTITY_PUBLIC_KEYS: JSON.stringify([publicKeyPem]),
@@ -191,7 +191,7 @@ async function send(
 	if (token) headers.set("x-everyapp-identity", token);
 	if (options.body !== undefined) headers.set("content-type", "application/json");
 	const response = await worker.fetch(
-		new Request(`https://agentic-inbox.acme.example${path}`, {
+		new Request(`https://openmail.acme.example${path}`, {
 			method,
 			headers,
 			body: options.body === undefined ? undefined : JSON.stringify(options.body),

@@ -39,7 +39,7 @@ describe("withGateway", () => {
 
 	it("AI.run() posts an OpenAI-compatible chat completion to the gateway's workers-ai path, attributed to the request", async () => {
 		const gateway = fakeGateway({ body: { choices: [{ message: { content: "NO" } }] } });
-		const request = new Request("https://agentic-inbox.example.com/api/v1/x", {
+		const request = new Request("https://openmail.example.com/api/v1/x", {
 			headers: { "x-everyapp-identity": "token-of-the-person" },
 		});
 		const { AI } = withGateway(env({ EVERY_APP_GATEWAY: gateway.binding }), request);
@@ -98,7 +98,7 @@ describe("withGateway", () => {
 
 	it("EMAIL.send() posts to the gateway's email capability, attributed to the request", async () => {
 		const gateway = fakeGateway({ body: { messageId: "<gw-1@example.com>", status: "delivered" } });
-		const request = new Request("https://agentic-inbox.example.com/api/v1/x", {
+		const request = new Request("https://openmail.example.com/api/v1/x", {
 			headers: { "x-everyapp-identity": "token-of-the-person" },
 		});
 		const { EMAIL } = withGateway(env({ EVERY_APP_GATEWAY: gateway.binding }), request);

@@ -1,8 +1,8 @@
 // The Every App manifest: what the gateway, the CLI and everyAppWorker()
 // know about this app. The Worker never imports this file.
 export default {
-  id: "agentic-inbox",
-  name: "Agentic Inbox",
+  id: "openmail",
+  name: "OpenMail",
   description:
     "A team inbox with an AI agent: receive, read, draft and send email on your own domain.",
   icon: "/everyapp-icon.svg",

@@ -34,7 +34,7 @@ function check(ok: boolean, what: string, detail?: unknown): void {
 
 // Hide cf's and wrangler's logins (and any token in the environment) from
 // every child: this machine's cf is logged in to a real account.
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "agentic-inbox-check-deploy-"));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "openmail-check-deploy-"));
 const childEnv: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: path.join(scratch, "nologin"), CI: "1" };
 for (const name of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CLOUDFLARE_EMAIL", "CF_API_TOKEN"]) {
 	delete childEnv[name];
@@ -110,7 +110,7 @@ try {
 	};
 	const manifest = release.manifest;
 	const durableObjects = (manifest.resources?.durableObjects ?? []).map((d) => d.className);
-	check(release.appId === "agentic-inbox" && manifest.id === "agentic-inbox", "manifest validates strictly (id agentic-inbox)", { appId: release.appId, id: manifest.id });
+	check(release.appId === "openmail" && manifest.id === "openmail", "manifest validates strictly (id openmail)", { appId: release.appId, id: manifest.id });
 	check(manifest.email?.inbound === true, "email.inbound declares the Worker's email handler", manifest.email?.inbound);
 	check(manifest.ai?.chat !== undefined, "ai.chat asks for the Gateway's default model", manifest.ai);
 

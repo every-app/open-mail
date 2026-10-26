@@ -31,7 +31,7 @@ import {
 	withinCallBudget,
 } from "../workers/everyapp/tools";
 
-const AUDIENCE = "every-acme-agentic-inbox";
+const AUDIENCE = "every-acme-openmail";
 const ISSUER = "https://apps.example.com";
 let privateKeyPem: string;
 let publicKeyPem: string;
@@ -74,7 +74,7 @@ async function listCatalog(): Promise<Catalog> {
 	const worker = everyApp(() => new Response("not found", { status: 404 }), { tools });
 	const token = await mintSystemJwt(privateKeyPem, { audience: AUDIENCE, issuer: ISSUER, purpose: "tools.list" });
 	const response = await worker.fetch(
-		new Request("https://agentic-inbox.acme.example/__everyapp/tools/list", {
+		new Request("https://openmail.acme.example/__everyapp/tools/list", {
 			method: "POST",
 			headers: { "content-type": "application/json", "x-everyapp-system": token },
 			body: JSON.stringify({ v: 1 }),
@@ -237,7 +237,7 @@ describe("what every call goes through", () => {
 	it("the organization pin: another organization's caller is refused on an organization's own copy", async () => {
 		const user = await mcpUser("org_other");
 		const env = { EVERY_APP_ORG_ID: "org_acme", AI_PROVIDER: "workers-ai" } as unknown as Cloudflare.Env;
-		const request = new Request("https://agentic-inbox.acme.example/__everyapp/tools/call");
+		const request = new Request("https://openmail.acme.example/__everyapp/tools/call");
 		await expect(toolEnv({ user, env, request })).rejects.toThrow(
 			new ToolError("Not allowed: this app belongs to another organization."),
 		);
@@ -246,7 +246,7 @@ describe("what every call goes through", () => {
 	it("the caller's own organization gets AI and EMAIL brokered by the gateway", async () => {
 		const user = await mcpUser("org_acme");
 		const env = { EVERY_APP_ORG_ID: "org_acme", AI_PROVIDER: "workers-ai" } as unknown as Cloudflare.Env;
-		const request = new Request("https://agentic-inbox.acme.example/__everyapp/tools/call");
+		const request = new Request("https://openmail.acme.example/__everyapp/tools/call");
 		const brokered = await toolEnv({ user, env, request });
 		expect(typeof brokered.AI.run).toBe("function");
 		expect(typeof brokered.EMAIL.send).toBe("function");

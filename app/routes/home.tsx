@@ -28,7 +28,7 @@ import { useDocumentTitle } from "~/hooks/useDocumentTitle";
 import { mailboxDisplayName } from "~/lib/utils";
 
 export function meta() {
-	return [{ title: "Mailboxes · Agentic Inbox" }];
+	return [{ title: "Mailboxes · OpenMail" }];
 }
 
 export default function HomeRoute() {

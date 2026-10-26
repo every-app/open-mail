@@ -195,6 +195,6 @@ export function closeAgentSocket(
 		connection.close(SOCKET_LIFETIME_CLOSE.code, SOCKET_LIFETIME_CLOSE.reason);
 	} catch (error) {
 		// Already closing.
-		console.warn("[agentic-inbox] closing an expired agent socket failed", error);
+		console.warn("[openmail] closing an expired agent socket failed", error);
 	}
 }

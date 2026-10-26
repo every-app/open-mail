@@ -76,7 +76,7 @@ export class ApiError extends Error {
 	}
 }
 
-const RELOAD_STAMP_KEY = "agentic-inbox:reloaded-for-401";
+const RELOAD_STAMP_KEY = "openmail:reloaded-for-401";
 const RELOAD_GUARD_MS = 10_000;
 
 /**

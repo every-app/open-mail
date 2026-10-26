@@ -309,7 +309,7 @@ function AgentChatConnected({
 
 	// Every App: partysocket picks wss for every host but
 	// localhost:/127.0.0.1:/private ranges, so under
-	// `everyapp dev` (http://agentic-inbox.localhost:<port>) the socket and
+	// `everyapp dev` (http://openmail.localhost:<port>) the socket and
 	// useAgentChat's get-messages fetch went to wss/https and the mailbox page
 	// fell into the error boundary. Follow the page's own protocol.
 	const agent = useAgent({

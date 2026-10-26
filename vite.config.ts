@@ -31,7 +31,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
  */
 function reactRouterBuildOutputShim(): Plugin {
   return {
-    name: "agentic-inbox:react-router-build-output-shim",
+    name: "openmail:react-router-build-output-shim",
     apply: "build",
     writeBundle(options) {
       if (this.environment?.name !== "client") return;

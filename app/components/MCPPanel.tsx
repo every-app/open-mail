@@ -98,7 +98,7 @@ function UrlField({ label, url }: { label: string; url: string }) {
 export default function MCPPanel() {
 	const { data: me } = useQuery({ ...meQuery, retry: false });
 	const appOrigin =
-		typeof window !== "undefined" ? window.location.origin : "https://agentic-inbox.your-gateway.example";
+		typeof window !== "undefined" ? window.location.origin : "https://openmail.your-gateway.example";
 	const gatewayOrigin = me?.gatewayUrl?.replace(/\/+$/, "");
 	const gatewayMcpUrl = gatewayOrigin ? `${gatewayOrigin}/mcp` : null;
 	const appMcpUrl = `${appOrigin}/mcp`;

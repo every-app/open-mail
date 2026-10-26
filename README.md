@@ -1,13 +1,15 @@
 <div align="center">
-  <h1>Agentic Inbox</h1>
+  <h1>OpenMail</h1>
   <p><em>A self-hosted email client with an AI agent, running entirely on Cloudflare Workers</em></p>
 </div>
 
-Agentic Inbox lets you send, receive, and manage emails through a modern web interface -- all powered by your own Cloudflare account. Incoming emails arrive via [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/), each mailbox is isolated in its own [Durable Object](https://developers.cloudflare.com/durable-objects/) with a SQLite database, and attachments are stored in [R2](https://developers.cloudflare.com/r2/).
+OpenMail lets you send, receive, and manage emails through a modern web interface -- all powered by your own Cloudflare account. Incoming emails arrive via [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/), each mailbox is isolated in its own [Durable Object](https://developers.cloudflare.com/durable-objects/) with a SQLite database, and attachments are stored in [R2](https://developers.cloudflare.com/r2/).
 
 An **AI-powered Email Agent** can read your inbox, search conversations, and draft replies -- built with the [Cloudflare Agents SDK](https://developers.cloudflare.com/agents/), on the model your Every App gateway's default model provider serves (or a pinned OpenRouter or Workers AI).
 
-![Agentic Inbox screenshot](./demo_app.png)
+![OpenMail screenshot](./demo_app.png)
+
+**Origin.** OpenMail is based on [cloudflare/agentic-inbox](https://github.com/cloudflare/agentic-inbox) (Apache-2.0) and is modified from it: renamed, ported to run behind an Every App gateway (sign-in, model calls, outgoing mail and MCP tools go through the gateway), and with upstream's own MCP server replaced by the gateway's tools. [docs/EVERY_APP.md](docs/EVERY_APP.md) lists every change. It is not an official Cloudflare product.
 
 
 Read the blog post to learn more about Cloudflare Email Service and how to use it with the Agents SDK, MCP, and from the Wrangler CLI: [Email for Agents](https://blog.cloudflare.com/email-for-agents/).
@@ -20,9 +22,9 @@ In short, with a gateway installed (`pnpm everyapp setup` in the Every App check
 
 1. **A model**: `pnpm everyapp secret set OPENROUTER_API_KEY` (a key from https://openrouter.ai/settings/keys), or any other model provider's key. The app takes the Gateway's default model (`ai.chat` in the manifest): the gateway doesn't open it until one provider is set up, and `pnpm everyapp ai default <provider>` picks which. To pin one provider instead, deploy with `AI_PROVIDER=openrouter` or `AI_PROVIDER=workers-ai`.
 2. **Your mail domain**: onboard it to Email Sending (its zone on Cloudflare DNS in the gateway's account).
-3. **Install**: from your Every App checkout, `pnpm everyapp install https://github.com/every-app/agentic-inbox` (the latest release, which the Release workflow publishes on every push; the same command updates it later), then `pnpm everyapp configure agentic-inbox`, which asks for any key from step 1 that is still missing. To deploy your own changes instead, run that checkout's CLI from this directory: `node ../every-app/packages/cli/bin/everyapp.js deploy`. Either uploads the Worker `every-<orgKey>-agentic-inbox`.
+3. **Install**: from your Every App checkout, `pnpm everyapp install https://github.com/every-app/open-mail` (the latest release, which the Release workflow publishes on every push; the same command updates it later), then `pnpm everyapp configure openmail`, which asks for any key from step 1 that is still missing. To deploy your own changes instead, run that checkout's CLI from this directory: `node ../every-app/packages/cli/bin/everyapp.js deploy`. Either uploads the Worker `every-<orgKey>-openmail`.
 4. **Set your mail domain** on the installation, not in the manifest: `pnpm everyapp email set --sender '*@example.com' --inbound '*@example.com'`. The gateway then sends as those addresses, turns on Email Routing for the domain if you agree, and routes its mail to the Worker. `pnpm everyapp email show` prints them.
-5. **Create a mailbox** at `https://agentic-inbox.<gateway domain>/` for an address on your domain.
+5. **Create a mailbox** at `https://openmail.<gateway domain>/` for an address on your domain.
 
 ## Features
 
@@ -46,7 +48,7 @@ You need Node 22+ and pnpm 10. The Every App SDK and CLI it builds with are the 
 ```bash
 pnpm install
 cp .dev.vars.example .dev.vars              # optional: AI keys, a real mail transport
-pnpm everyapp dev                           # http://agentic-inbox.localhost:8787, signed in as a seeded owner
+pnpm everyapp dev                           # http://openmail.localhost:8787, signed in as a seeded owner
 ```
 
 `pnpm test`, `pnpm types:check`, `pnpm build`, `pnpm check:deploy` (what `everyapp deploy` checks before it uploads, run offline on a production build) and `pnpm check:runbook` (every name the runbook says to `secret set` is a Gateway setting) are described in [docs/EVERY_APP.md](docs/EVERY_APP.md#tests-and-checks).
@@ -76,4 +78,4 @@ Anyone in the organization that owns the app can use every mailbox, including th
 
 ## License
 
-Apache 2.0 -- see [LICENSE](LICENSE).
+Apache 2.0 -- see [LICENSE](LICENSE). Upstream's license is kept unchanged; the changes from cloudflare/agentic-inbox are this fork's own, under the same license.

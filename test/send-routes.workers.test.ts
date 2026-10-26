@@ -13,7 +13,7 @@ import type { Env } from "../workers/types";
 
 type Send = (message: SendEmailMessage) => Promise<SendEmailResult>;
 
-const ORIGIN = "https://agentic-inbox.example.com";
+const ORIGIN = "https://openmail.example.com";
 let count = 0;
 
 afterEach(() => vi.restoreAllMocks());

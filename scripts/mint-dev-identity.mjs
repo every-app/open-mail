@@ -12,7 +12,7 @@ const [role = "member", orgId = "dev-org"] = process.argv.slice(2);
 const token = await mintIdentityJwt(DEV_PRIVATE_KEY_PEM, {
 	subject: { sub: `dev-${role}`, email: `${role}@everyapp.localhost`, orgId, orgRole: role },
 	// Under `everyapp dev` the Worker's audience is the app id (everyapp.config.ts).
-	audience: "agentic-inbox",
+	audience: "openmail",
 	issuer: DEV_ISSUER,
 	channel: "web",
 	keyId: IDENTITY_DEV_KEY_ID,
