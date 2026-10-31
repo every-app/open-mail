@@ -2,260 +2,320 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Dialog, Input, Tooltip } from "@cloudflare/kumo";
 import {
-	ArchiveIcon,
-	CaretLeftIcon,
-	FileIcon,
-	FolderIcon,
-	PaperPlaneTiltIcon,
-	PencilSimpleIcon,
-	PlusIcon,
-	ProhibitIcon,
-	TrashIcon,
-	TrayIcon,
-} from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router";
+	Archive,
+	ChevronRight,
+	File,
+	Folder as FolderIcon,
+	Inbox,
+	OctagonAlert,
+	Pencil,
+	Plus,
+	Send,
+	Star,
+	Trash2,
+} from "lucide-react";
+import { type ComponentType, type FormEvent, useMemo, useState } from "react";
+import { NavLink, useLocation, useSearchParams } from "react-router";
 import { Folders, SYSTEM_FOLDER_IDS } from "shared/folders";
-import { useCreateFolder, useFolders } from "~/queries/folders";
-import { useMailbox } from "~/queries/mailboxes";
-import { mailboxDisplayName } from "~/lib/utils";
+import SidebarLabels from "~/components/SidebarLabels";
+import { Button } from "~/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useUIStore } from "~/hooks/useUIStore";
+import { cn } from "~/lib/cn";
+import { folderPath, mailboxPath } from "~/lib/mail-paths";
+import { useEmails } from "~/queries/emails";
+import { useCreateFolder, useFolders } from "~/queries/folders";
 
-const FOLDER_ICONS: Record<string, React.ReactNode> = {
-	[Folders.INBOX]: <TrayIcon size={18} weight="regular" />,
-	[Folders.SENT]: <PaperPlaneTiltIcon size={18} weight="regular" />,
-	[Folders.DRAFT]: <FileIcon size={18} weight="regular" />,
-	[Folders.ARCHIVE]: <ArchiveIcon size={18} weight="regular" />,
-	[Folders.TRASH]: <TrashIcon size={18} weight="regular" />,
-	[Folders.SPAM]: <ProhibitIcon size={18} weight="regular" />,
-};
+type Icon = ComponentType<{ className?: string }>;
 
-const SYSTEM_FOLDER_LINKS = [
-	{ id: Folders.INBOX, label: "Inbox" },
-	{ id: Folders.SENT, label: "Sent" },
-	{ id: Folders.DRAFT, label: "Drafts" },
-	{ id: Folders.ARCHIVE, label: "Archive" },
-	{ id: Folders.TRASH, label: "Trash" },
-	{ id: Folders.SPAM, label: "Spam" },
+const STARRED_QUERY = "is:starred";
+
+const SYSTEM_ITEMS: { id: string; label: string; icon: Icon }[] = [
+	{ id: Folders.INBOX, label: "Inbox", icon: Inbox },
+	{ id: "starred", label: "Starred", icon: Star },
+	{ id: Folders.SENT, label: "Sent", icon: Send },
+	{ id: Folders.DRAFT, label: "Drafts", icon: File },
+	{ id: Folders.ARCHIVE, label: "Archive", icon: Archive },
+	{ id: Folders.SPAM, label: "Spam", icon: OctagonAlert },
+	{ id: Folders.TRASH, label: "Trash", icon: Trash2 },
 ];
 
-interface FolderLinkProps {
+interface NavItemProps {
 	to: string;
-	icon: React.ReactNode;
+	icon: Icon;
 	label: string;
-	unreadCount?: number;
-	onClick?: () => void;
+	count?: number;
+	/** Bold label and count (unread mail), as Gmail does; Drafts' total isn't. */
+	emphasize?: boolean;
+	collapsed: boolean;
+	/** Overrides NavLink's own path match (Starred is a search). */
+	active?: boolean;
+	onNavigate?: () => void;
 }
 
-function FolderLink({
-	to,
-	icon,
-	label,
-	unreadCount,
-	onClick,
-}: FolderLinkProps) {
-	return (
+function NavItem({ to, icon: Icon, label, count, emphasize = true, collapsed, active, onNavigate }: NavItemProps) {
+	const hasCount = count != null && count > 0;
+	const link = (
 		<NavLink
 			to={to}
-			onClick={onClick}
-			className={({ isActive }) =>
-				`flex items-center gap-3 py-2 px-3 rounded-md text-sm transition-colors ${
-					isActive
-						? "bg-kumo-fill font-semibold text-kumo-default"
-						: "text-kumo-strong hover:bg-kumo-tint"
-				}`
-			}
+			onClick={onNavigate}
+			aria-label={collapsed ? (hasCount ? `${label}, ${count}` : label) : undefined}
+			className={({ isActive }) => {
+				const on = active ?? isActive;
+				return cn(
+					"relative flex h-8 items-center rounded-full text-sm text-sidebar-foreground/80 transition-colors outline-none hover:bg-sidebar-accent/60 hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+					collapsed ? "mx-auto w-12 justify-center" : "gap-3 pr-3 pl-4",
+					on && "bg-sidebar-accent font-semibold text-sidebar-accent-foreground hover:bg-sidebar-accent",
+					hasCount && emphasize && "font-semibold text-sidebar-foreground",
+				);
+			}}
 		>
-			<span className="shrink-0">{icon}</span>
-			<span className="truncate flex-1">{label}</span>
-			{unreadCount != null && unreadCount > 0 && (
-				<Badge variant="secondary">{unreadCount}</Badge>
+			<Icon className="size-4 shrink-0" />
+			{collapsed ? (
+				hasCount &&
+				emphasize && <span className="absolute top-1.5 right-3 size-2 rounded-full bg-primary" aria-hidden />
+			) : (
+				<>
+					<span className="flex-1 truncate">{label}</span>
+					{hasCount && <span className={cn("text-xs tabular-nums", !emphasize && "font-normal")}>{count}</span>}
+				</>
 			)}
 		</NavLink>
 	);
+
+	if (!collapsed) return link;
+	return (
+		<Tooltip>
+			<TooltipTrigger render={link} />
+			<TooltipContent side="right">
+				{label}
+				{hasCount ? ` (${count})` : ""}
+			</TooltipContent>
+		</Tooltip>
+	);
 }
 
-export default function Sidebar() {
-	const { mailboxId } = useParams<{ mailboxId: string }>();
-	const navigate = useNavigate();
-	const { data: folders = [] } = useFolders(mailboxId);
-	const createFolderMutation = useCreateFolder();
-	const { startCompose, closeSidebar } = useUIStore();
-	const { data: currentMailbox } = useMailbox(mailboxId);
-	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-	const [newFolderName, setNewFolderName] = useState("");
+function CreateFolderDialog({
+	mailboxId,
+	open,
+	onOpenChange,
+}: {
+	mailboxId: string;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+}) {
+	const createFolder = useCreateFolder();
+	const [name, setName] = useState("");
 
-	const customFolders = useMemo(
-		() =>
-			folders.filter((f) => !(SYSTEM_FOLDER_IDS as readonly string[]).includes(f.id)),
-		[folders],
-	);
-
-	const getUnreadCount = (folderId: string) => {
-		const found = folders.find((f) => f.id === folderId);
-		return found?.unreadCount || 0;
-	};
-
-	const handleCreateFolder = (e: React.FormEvent) => {
+	const handleSubmit = async (e: FormEvent) => {
 		e.preventDefault();
-		if (newFolderName.trim() && mailboxId) {
-			createFolderMutation.mutate({ mailboxId, name: newFolderName.trim() });
-			setNewFolderName("");
-			setIsCreateFolderOpen(false);
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		try {
+			await createFolder.mutateAsync({ mailboxId, name: trimmed });
+			setName("");
+			onOpenChange(false);
+		} catch {
+			// The mutation cache logs it; the dialog stays open to retry.
 		}
 	};
 
-	const displayName = useMemo(
-		() => mailboxDisplayName(currentMailbox, mailboxId),
-		[currentMailbox, mailboxId],
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent>
+				<form onSubmit={handleSubmit} className="grid gap-4">
+					<DialogHeader>
+						<DialogTitle>New folder</DialogTitle>
+					</DialogHeader>
+					<div className="grid gap-2">
+						<Label htmlFor="new-folder-name">Folder name</Label>
+						<Input
+							id="new-folder-name"
+							placeholder="e.g. Projects"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							autoFocus
+							required
+						/>
+						{createFolder.isError && (
+							<p className="text-sm text-destructive">Couldn't create the folder. Try again.</p>
+						)}
+					</div>
+					<DialogFooter>
+						<DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+						<Button type="submit" disabled={!name.trim()} pending={createFolder.isPending}>
+							Create
+						</Button>
+					</DialogFooter>
+				</form>
+			</DialogContent>
+		</Dialog>
 	);
+}
 
-	const handleNavClick = () => {
-		// Close mobile sidebar on navigation
-		closeSidebar();
+/**
+ * Gmail's left navigation: Compose, the system folders with unread counts,
+ * custom Folders, then Labels (SidebarLabels). `collapsed` is the desktop
+ * icon rail.
+ */
+export default function Sidebar({
+	mailboxId,
+	collapsed = false,
+	onNavigate,
+}: {
+	mailboxId: string;
+	collapsed?: boolean;
+	/** Called after a navigation (closes the mobile sheet). */
+	onNavigate?: () => void;
+}) {
+	const { data: folders = [] } = useFolders(mailboxId);
+	// Drafts shows its total, which the folder list doesn't carry.
+	const { data: drafts } = useEmails(mailboxId, { folder: Folders.DRAFT, page: "1", limit: "1" });
+	const startCompose = useUIStore((s) => s.startCompose);
+	const location = useLocation();
+	const [searchParams] = useSearchParams();
+	const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+	const [foldersOpen, setFoldersOpen] = useState(true);
+
+	const isStarredView =
+		/\/search(\/|$)/.test(location.pathname) && searchParams.get("q")?.trim() === STARRED_QUERY;
+
+	const customFolders = useMemo(
+		// Upstream's SYSTEM_FOLDER_IDS leaves Spam out; it's a system folder here.
+		() => folders.filter((f) => f.id !== Folders.SPAM && !(SYSTEM_FOLDER_IDS as readonly string[]).includes(f.id)),
+		[folders],
+	);
+	const unread = (id: string) => folders.find((f) => f.id === id)?.unreadCount ?? 0;
+
+	const compose = () => {
+		startCompose();
+		onNavigate?.();
 	};
 
 	return (
-		<aside className="h-full w-64 bg-kumo-recessed flex flex-col shrink-0 border-r border-kumo-line">
-			{/* Back + identity */}
-			<div className="px-4 pt-4 pb-1">
-				<button
-					type="button"
-					onClick={() => {
-						navigate("/");
-						closeSidebar();
-					}}
-					className="flex items-center gap-1.5 text-kumo-subtle text-sm hover:text-kumo-default transition-colors mb-2.5 cursor-pointer bg-transparent border-0 p-0"
-				>
-					<CaretLeftIcon size={14} />
-					<span>Mailboxes</span>
-				</button>
-				<div className="px-1">
-					<div className="text-base font-semibold text-kumo-default truncate">
-						{displayName}
-					</div>
-					<div className="text-sm text-kumo-subtle truncate mt-0.5">
-						{currentMailbox?.email || mailboxId}
-					</div>
-				</div>
-			</div>
-
-			{/* Compose */}
-			<div className="px-3 py-3">
-				<Button
-					variant="primary"
-					icon={<PencilSimpleIcon size={16} />}
-					onClick={() => startCompose()}
-					className="w-full"
-				>
-					Compose
-				</Button>
-			</div>
-
-			{/* Navigation */}
-			<nav className="flex-1 overflow-y-auto px-2 space-y-0.5">
-				{SYSTEM_FOLDER_LINKS.map((folder) => (
-					<FolderLink
-						key={folder.id}
-						to={`/mailbox/${mailboxId}/emails/${folder.id}`}
-						icon={FOLDER_ICONS[folder.id]}
-						label={folder.label}
-						unreadCount={getUnreadCount(folder.id)}
-						onClick={handleNavClick}
-					/>
-				))}
-
-				{/* Custom folders */}
-				{customFolders.length > 0 && (
-					<div className="pt-5">
-						<div className="flex items-center justify-between px-3 mb-1.5">
-							<span className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle">
-								Folders
-							</span>
-							<Tooltip content="New folder" asChild>
-								<Button
-									variant="ghost"
-									shape="square"
-									size="sm"
-									icon={<PlusIcon size={16} />}
-									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="New folder"
-								/>
-							</Tooltip>
-						</div>
-						{customFolders.map((folder) => (
-							<FolderLink
-								key={folder.id}
-								to={`/mailbox/${mailboxId}/emails/${folder.id}`}
-								icon={<FolderIcon size={18} />}
-								label={folder.name}
-								unreadCount={folder.unreadCount}
-								onClick={handleNavClick}
-							/>
-						))}
-					</div>
-				)}
-
-				{/* Add folder button when no custom folders */}
-				{customFolders.length === 0 && (
-					<div className="pt-5">
-						<div className="flex items-center justify-between px-3 mb-1.5">
-							<span className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle">
-								Folders
-							</span>
-							<Tooltip content="New folder" asChild>
-								<Button
-									variant="ghost"
-									shape="square"
-									size="sm"
-									icon={<PlusIcon size={16} />}
-									onClick={() => setIsCreateFolderOpen(true)}
-									aria-label="New folder"
-								/>
-							</Tooltip>
-						</div>
-					</div>
-				)}
-			</nav>
-
-			{/* Create folder dialog */}
-			<Dialog.Root
-				open={isCreateFolderOpen}
-				onOpenChange={setIsCreateFolderOpen}
-			>
-				<Dialog size="sm" className="p-6">
-					<Dialog.Title className="text-base font-semibold mb-4">
-						New folder
-					</Dialog.Title>
-					<form onSubmit={handleCreateFolder} className="space-y-4">
-						<Input
-							label="Folder name"
-							placeholder="e.g. Projects"
-							value={newFolderName}
-							onChange={(e) => setNewFolderName(e.target.value)}
-							required
+		<nav aria-label="Mail" className="flex h-full min-h-0 flex-col">
+			<div className={cn("shrink-0 pt-1 pb-3", collapsed ? "px-2" : "pr-3 pl-2")}>
+				{collapsed ? (
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button size="icon-lg" className="mx-auto flex rounded-2xl shadow-sm" aria-label="Compose" onClick={compose}>
+									<Pencil className="size-5" />
+								</Button>
+							}
 						/>
-						<div className="flex justify-end gap-2">
-							<Dialog.Close
-								render={(props) => (
-									<Button {...props} variant="secondary">
-										Cancel
-									</Button>
-								)}
+						<TooltipContent side="right">Compose (c)</TooltipContent>
+					</Tooltip>
+				) : (
+					<Button size="lg" className="rounded-2xl px-5 shadow-sm" onClick={compose}>
+						<Pencil className="size-5" />
+						Compose
+					</Button>
+				)}
+			</div>
+
+			<div className={cn("min-h-0 flex-1 overflow-y-auto pb-4", collapsed ? "px-1" : "pr-3 pl-2")}>
+				<div className="space-y-0.5">
+					{SYSTEM_ITEMS.map((item) =>
+						item.id === "starred" ? (
+							<NavItem
+								key={item.id}
+								to={`${mailboxPath(mailboxId)}/search?q=${encodeURIComponent(STARRED_QUERY)}`}
+								icon={item.icon}
+								label={item.label}
+								collapsed={collapsed}
+								active={isStarredView}
+								onNavigate={onNavigate}
 							/>
-							<Button
-								type="submit"
-								variant="primary"
-								disabled={!newFolderName.trim()}
-							>
-								Create
-							</Button>
+						) : (
+							<NavItem
+								key={item.id}
+								to={folderPath(mailboxId, item.id)}
+								icon={item.icon}
+								label={item.label}
+								count={item.id === Folders.DRAFT ? drafts?.totalCount : unread(item.id)}
+								emphasize={item.id !== Folders.DRAFT}
+								collapsed={collapsed}
+								onNavigate={onNavigate}
+							/>
+						),
+					)}
+				</div>
+
+				{collapsed ? (
+					customFolders.length > 0 && (
+						<div className="mt-3 space-y-0.5 border-t border-sidebar-border pt-3">
+							{customFolders.map((folder) => (
+								<NavItem
+									key={folder.id}
+									to={folderPath(mailboxId, folder.id)}
+									icon={FolderIcon}
+									label={folder.name}
+									count={folder.unreadCount}
+									collapsed
+									onNavigate={onNavigate}
+								/>
+							))}
 						</div>
-					</form>
-				</Dialog>
-			</Dialog.Root>
-		</aside>
+					)
+				) : (
+					<Collapsible open={foldersOpen} onOpenChange={setFoldersOpen} className="mt-4">
+						<div className="flex h-8 items-center justify-between pr-1 pl-4">
+							<CollapsibleTrigger className="group/folders flex items-center gap-1 text-sm font-medium text-sidebar-foreground outline-none focus-visible:underline">
+								Folders
+								<ChevronRight className="size-3.5 text-muted-foreground transition-transform group-data-[panel-open]/folders:rotate-90" />
+							</CollapsibleTrigger>
+							<Tooltip>
+								<TooltipTrigger
+									render={
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											aria-label="New folder"
+											onClick={() => setIsCreateFolderOpen(true)}
+										>
+											<Plus />
+										</Button>
+									}
+								/>
+								<TooltipContent side="right">New folder</TooltipContent>
+							</Tooltip>
+						</div>
+						<CollapsibleContent className="space-y-0.5">
+							{customFolders.map((folder) => (
+								<NavItem
+									key={folder.id}
+									to={folderPath(mailboxId, folder.id)}
+									icon={FolderIcon}
+									label={folder.name}
+									count={folder.unreadCount}
+									collapsed={false}
+									onNavigate={onNavigate}
+								/>
+							))}
+							{customFolders.length === 0 && (
+								<p className="py-1 pl-4 text-xs text-muted-foreground">No folders yet</p>
+							)}
+						</CollapsibleContent>
+					</Collapsible>
+				)}
+
+				<SidebarLabels mailboxId={mailboxId} collapsed={collapsed} onNavigate={onNavigate} />
+			</div>
+
+			<CreateFolderDialog mailboxId={mailboxId} open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen} />
+		</nav>
 	);
 }

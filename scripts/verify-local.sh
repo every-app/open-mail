@@ -18,6 +18,14 @@
 # and the auto-draft is skipped with the same reason; both count as passing
 # (the port's documented behaviour). With keys, Drafts gets the agent's
 # reply (billed to the key's owner).
+#
+# A fresh clone or worktree has no .dev.vars (gitignored), and without
+# EVERYAPP_EMAIL_SENDERS the SDK refuses every send, so the send checks fail.
+# Create one first (see .dev.vars.example):
+#
+#   printf 'EVERYAPP_EMAIL_SENDERS=["*@example.com"]\n' > .dev.vars
+#
+# and restart `everyapp dev` so it reads it.
 set -u
 GW_PORT="${1:?usage: bash scripts/verify-local.sh <gateway port> <app Vite port> [dev server log]}"
 APP_PORT="${2:?usage: bash scripts/verify-local.sh <gateway port> <app Vite port> [dev server log]}"
@@ -134,7 +142,7 @@ curl "${R[@]}" "${H[@]}" -o /dev/null -X POST -d '{"jsonrpc":"2.0","method":"not
 rpc tools/list 2 '{}'
 names=$(json "$TMP/rpc.json" 'j.result.tools.map((t) => t.name).sort().join(",")')
 count=$(json "$TMP/rpc.json" 'j.result.tools.length')
-[ "$count" = 12 ] && [ "${names#*delete_email}" = "$names" ] && pass "tools/list -> 12 tools, no delete_email: $names" || fail "tools/list -> $count: $names"
+[ "$count" = 15 ] && [ "${names#*delete_email}" = "$names" ] && pass "tools/list -> 15 tools, no delete_email: $names" || fail "tools/list -> $count: $names"
 rpc tools/call 3 '{"name":"list_mailboxes","arguments":{}}'
 listed=$(json "$TMP/rpc.json" 'j.result.content.map((c) => c.text).join("")')
 case "$listed" in *"$MAILBOX"*) pass "tools/call list_mailboxes -> includes $MAILBOX" ;; *) fail "tools/call list_mailboxes -> $(head -c 300 "$TMP/rpc.json")" ;; esac

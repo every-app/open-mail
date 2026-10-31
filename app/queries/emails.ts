@@ -21,7 +21,8 @@ export function useEmails(
 	params: Record<string, string>,
 	options?: { enabled?: boolean; refetchInterval?: number },
 ) {
-	const queryParams = params.folder
+	// A folder's or a label's (`label: <id>`) conversations, threaded.
+	const queryParams = params.folder || params.label
 		? { ...params, threaded: "true" }
 		: params;
 

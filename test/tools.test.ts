@@ -50,8 +50,18 @@ beforeAll(() => {
 // names.ts MAX_TOOL_NAME_LENGTH); instructions are held to the plan's 1,024.
 const LIMITS = { schemaBytes: 20 * 1024, descriptionChars: 2048, titleChars: 100, instructionsChars: 1024, namespacedName: 64 };
 
-const READ = ["get_email", "get_thread", "list_emails", "list_mailboxes", "search_emails"];
-const WRITE = ["create_draft", "draft_reply", "mark_email_read", "move_email", "send_email", "send_reply", "update_draft"];
+const READ = ["get_email", "get_thread", "list_emails", "list_labels", "list_mailboxes", "search_emails"];
+const WRITE = [
+	"create_draft",
+	"create_label",
+	"draft_reply",
+	"label_conversation",
+	"mark_email_read",
+	"move_email",
+	"send_email",
+	"send_reply",
+	"update_draft",
+];
 
 interface Descriptor {
 	name: string;
@@ -92,7 +102,7 @@ async function listCatalog(): Promise<Catalog> {
 }
 
 describe("the catalog the gateway snapshots", () => {
-	it("has upstream's thirteen tools, within the ToolBus's limits", async () => {
+	it("has upstream's thirteen tools and the port's three label tools, within the ToolBus's limits", async () => {
 		const catalog = await listCatalog();
 		expect(catalog.warnings).toBeUndefined();
 		expect(catalog.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -149,7 +159,7 @@ describe("the catalog the gateway snapshots", () => {
 
 	it("the MCP panel lists every tool an AI client can see, in step with the catalog", async () => {
 		const visible = (await listCatalog()).tools.filter((t) => t.risk !== "destructive").map((t) => t.name);
-		expect(visible).toHaveLength(12);
+		expect(visible).toHaveLength(15);
 		expect(MCP_TOOLS.map((t) => t.name).sort()).toEqual(visible.sort());
 	});
 });

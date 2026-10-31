@@ -152,7 +152,7 @@ async function inboundEmail(address: string): Promise<string> {
 const BODY = "<p>Thanks for your order. It ships on Tuesday by courier.</p>";
 
 describe("the catalog through the production entry", () => {
-	it("everyApp() in workers/app.ts answers the gateway's tools/list with the thirteen tools", async () => {
+	it("everyApp() in workers/app.ts answers the gateway's tools/list with the sixteen tools", async () => {
 		const token = await mintSystemJwt(privateKeyPem, { audience: AUDIENCE, issuer: ISSUER, purpose: "tools.list" });
 		const ctx = createExecutionContext();
 		const response = await worker.fetch(
@@ -167,7 +167,7 @@ describe("the catalog through the production entry", () => {
 		await waitOnExecutionContext(ctx);
 		expect(response.status).toBe(200);
 		const catalog = (await response.json()) as { tools: { name: string }[] };
-		expect(catalog.tools).toHaveLength(13);
+		expect(catalog.tools).toHaveLength(16);
 	});
 });
 
@@ -322,5 +322,60 @@ describe("tool calls", () => {
 		expect(answer.status).toBe(400);
 		expect(answer.body.error?.code).toBe("invalid_arguments");
 		expect(answer.body.error?.message).toContain("limit");
+	});
+});
+
+describe("label tools", () => {
+	it("create_label, list_labels and label_conversation (by name, creating only when asked)", async () => {
+		const address = await newMailbox();
+		const id = await inboundEmail(address);
+
+		const created = await callTool("create_label", { mailboxId: address, name: "Work", color: "amber" });
+		expect(JSON.parse(textOf(created))).toMatchObject({ name: "Work", color: "amber" });
+		const duplicate = await callTool("create_label", { mailboxId: address, name: "work" });
+		expect(duplicate.body.result?.isError).toBe(true);
+		expect(textOf(duplicate)).toContain("already exists");
+
+		const missing = await callTool("label_conversation", { mailboxId: address, threadId: id, add: ["Work", "Reports"] });
+		expect(missing.body.result?.isError).toBe(true);
+		expect(textOf(missing)).toContain('"Reports"');
+
+		// An unknown conversation is refused before createMissing creates anything.
+		const nowhere = await callTool("label_conversation", {
+			mailboxId: address,
+			threadId: "no-such-thread",
+			add: ["Ghost"],
+			createMissing: true,
+		});
+		expect(nowhere.body.result?.isError).toBe(true);
+		expect(textOf(nowhere)).toContain('No conversation or email "no-such-thread"');
+		const untouched = JSON.parse(textOf(await callTool("list_labels", { mailboxId: address }))) as { name: string }[];
+		expect(untouched.map((l) => l.name)).toEqual(["Work"]);
+
+		const labeled = await callTool("label_conversation", {
+			mailboxId: address,
+			threadId: id,
+			add: ["work", "Work/Reports"],
+			createMissing: true,
+		});
+		expect(labeled.body.result?.isError).toBeUndefined();
+		const answer = JSON.parse(textOf(labeled)) as { threadId: string; labels: { name: string }[] };
+		expect(answer.threadId).toBe(id);
+		expect(answer.labels.map((l) => l.name)).toEqual(["Work", "Work/Reports"]);
+
+		const removed = await callTool("label_conversation", { mailboxId: address, threadId: id, remove: ["Work"] });
+		expect((JSON.parse(textOf(removed)) as { labels: { name: string }[] }).labels.map((l) => l.name)).toEqual([
+			"Work/Reports",
+		]);
+
+		const listed = JSON.parse(textOf(await callTool("list_labels", { mailboxId: address }))) as { name: string; unreadCount: number }[];
+		expect(listed.map((l) => [l.name, l.unreadCount])).toEqual([
+			["Work", 0],
+			["Work/Reports", 1],
+		]);
+
+		// list_emails (upstream's tool) shows each conversation's labels.
+		const emails = JSON.parse(textOf(await callTool("list_emails", { mailboxId: address }))) as { labels: { name: string }[] }[];
+		expect(emails[0]!.labels.map((l) => l.name)).toEqual(["Work/Reports"]);
 	});
 });

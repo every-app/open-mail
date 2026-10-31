@@ -2,220 +2,255 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Badge, Button, Tooltip } from "@cloudflare/kumo";
-import {
-	CaretDownIcon,
-	CaretUpIcon,
-	CodeIcon,
-	PaperPlaneTiltIcon,
-	PencilSimpleIcon,
-	TrashIcon,
-} from "@phosphor-icons/react";
+import { ChevronDown, Code, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Star, Trash2 } from "lucide-react";
+import { useState } from "react";
 import EmailAttachmentList from "~/components/EmailAttachmentList";
 import EmailIframe from "~/components/EmailIframe";
+import { IconTooltip } from "~/components/conversation/IconTooltip";
+import { isSelf, parsePerson, relativeTime, shortRecipients } from "~/components/conversation/people";
+import { SenderAvatar } from "~/components/conversation/SenderAvatar";
+import { Button } from "~/components/ui/button";
 import {
-	formatDetailDate,
-	formatShortDate,
-	stripHtml,
-	useInlineImages,
-} from "~/lib/utils";
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import { cn } from "~/lib/cn";
+import { formatDetailDate, formatListDate, getNonInlineAttachments, stripHtml, useInlineImages } from "~/lib/utils";
 import type { Email } from "~/types";
 
-interface ThreadMessageProps {
+export interface ThreadMessageActions {
+	onReply: () => void;
+	onReplyAll: () => void;
+	onForward: () => void;
+	onShowOriginal: () => void;
+	onDelete: () => void;
+	onToggleStar: () => void;
+	onPreviewImage: (url: string, filename: string) => void;
+}
+
+interface ThreadMessageProps extends ThreadMessageActions {
 	email: Email;
 	mailboxId?: string;
-	mailboxEmail?: string;
-	/** What the mailbox is called, for messages it sent (the sidebar's name). */
-	mailboxName?: string;
-	isLast: boolean;
-	isDraft?: boolean;
-	isSending?: boolean;
-	isExpanded: boolean;
+	/** The mailbox's own address, for "me" and "to me". */
+	selfAddress?: string;
+	/** What the mailbox is called, for the messages it sent. */
+	selfName?: string;
+	expanded: boolean;
+	/** False for a conversation's only message: it stays open. */
+	canCollapse: boolean;
 	onToggleExpand: () => void;
-	onSendDraft?: () => void;
-	onEditDraft?: () => void;
-	onDeleteDraft?: () => void;
-	onViewSource?: () => void;
-	onPreviewImage?: (url: string, filename: string) => void;
 }
 
 /** The expanded message body, its inline images fetched by the page (see `useInlineImages`). */
 function MessageBody({ email, mailboxId }: { email: Email; mailboxId?: string }) {
-	const body = useInlineImages(email.body || "", mailboxId, email.id, email.attachments);
-	return <EmailIframe body={body} autoSize />;
-}
-
-function Avatar({ isDraft, isSelf, sender }: { isDraft?: boolean; isSelf: boolean; sender: string }) {
+	// A plain-text body (no tags) keeps its line breaks.
+	const raw = email.body || "";
+	const html = /<[a-z!/][^>]*>/i.test(raw) ? raw : raw.replace(/\r?\n/g, "<br>");
+	const body = useInlineImages(html, mailboxId, email.id, email.attachments);
+	// Mail is written for a white page: in dark mode it keeps one, inset.
 	return (
-		<div
-			className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-				isDraft
-					? "bg-kumo-fill text-kumo-subtle"
-					: isSelf
-						? "bg-kumo-brand text-kumo-inverse"
-						: "bg-kumo-fill text-kumo-default"
-			}`}
-		>
-			{isDraft ? "D" : sender.charAt(0).toUpperCase()}
+		<div className="dark:rounded-lg dark:bg-white dark:p-4">
+			<EmailIframe body={body} autoSize />
 		</div>
 	);
 }
 
+function senderLabel(email: Email, selfAddress?: string, selfName?: string) {
+	const person = parsePerson(email.sender);
+	if (isSelf(email.sender, selfAddress)) return { ...person, name: selfName || person.name, hasName: Boolean(selfName) };
+	return person;
+}
+
+function snippetOf(email: Email): string {
+	// From the body when there is one: block ends become spaces ("welcome! Riley", not "welcome!Riley").
+	const text = email.body ? stripHtml(email.body.replace(/<br\s*\/?>|<\/(p|div|li|h\d)>/gi, " ")) : email.snippet || "";
+	return text.replace(/\s+/g, " ").trim();
+}
+
+/** A date with its relative time ("3 days ago") in a tooltip. */
+function MessageDate({ date, short }: { date: string; short?: boolean }) {
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				render={<span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground" />}
+			>
+				{short ? formatListDate(date) : formatDetailDate(date)}
+			</TooltipTrigger>
+			<TooltipContent side="bottom">{relativeTime(date)}</TooltipContent>
+		</Tooltip>
+	);
+}
+
+function DetailRow({ label, value }: { label: string; value?: string | null }) {
+	if (!value) return null;
+	return (
+		<>
+			<dt className="text-right text-muted-foreground">{label}:</dt>
+			<dd className="min-w-0 break-words text-foreground">{value}</dd>
+		</>
+	);
+}
+
+/**
+ * One message of a conversation, Gmail's way: a one-line row when collapsed
+ * (avatar, sender, snippet, date), the full header, body and attachments when
+ * expanded. Clicking the header toggles it.
+ */
 export default function ThreadMessage({
 	email,
 	mailboxId,
-	mailboxEmail,
-	mailboxName,
-	isLast,
-	isDraft,
-	isSending,
-	isExpanded,
+	selfAddress,
+	selfName,
+	expanded,
+	canCollapse,
 	onToggleExpand,
-	onSendDraft,
-	onEditDraft,
-	onDeleteDraft,
-	onViewSource,
+	onReply,
+	onReplyAll,
+	onForward,
+	onShowOriginal,
+	onDelete,
+	onToggleStar,
 	onPreviewImage,
 }: ThreadMessageProps) {
-	const isSelf = email.sender === mailboxEmail;
-	const containerClassName = `${!isLast ? "border-b border-kumo-line" : ""} ${isDraft ? "border-l-2 border-l-kumo-warning bg-kumo-warning/[0.02]" : ""}`;
-	const senderLabel = isDraft ? "Draft reply" : isSelf ? mailboxName || email.sender : email.sender;
+	const [showDetails, setShowDetails] = useState(false);
+	const sender = senderLabel(email, selfAddress, selfName);
+	const hasAttachments = getNonInlineAttachments(email.attachments).length > 0;
 
-	if (!isExpanded) {
+	if (!expanded) {
 		return (
-			<div className={containerClassName}>
-				<button
-					type="button"
-					onClick={onToggleExpand}
-					className="w-full flex items-center gap-3 px-4 py-3 hover:bg-kumo-tint rounded-lg text-left"
-				>
-					<Avatar isDraft={isDraft} isSelf={isSelf} sender={email.sender} />
-					<div className="flex-1 min-w-0">
-						<div className="flex items-center justify-between">
-							<span className="text-sm font-medium text-kumo-default truncate">
-								{senderLabel}
-							</span>
-							<span className="text-xs text-kumo-subtle shrink-0">
-								{formatDetailDate(email.date)}
-							</span>
-						</div>
-						<p className="text-xs text-kumo-subtle truncate">
-							{stripHtml(email.body || "").slice(0, 80)}
-						</p>
-					</div>
-					<CaretDownIcon size={14} className="text-kumo-subtle shrink-0" />
-				</button>
-			</div>
+			<button
+				type="button"
+				onClick={onToggleExpand}
+				className="flex w-full items-center gap-3 px-4 py-2.5 text-left outline-none hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset md:px-6"
+				aria-expanded={false}
+				aria-label={`Expand message from ${sender.name}`}
+			>
+				<SenderAvatar sender={email.sender} />
+				{/* One line from sm up; sender over snippet on phones. */}
+				<span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
+					<span className={cn("truncate text-sm sm:w-44 sm:shrink-0", !email.read ? "font-semibold" : "font-medium")}>
+						{sender.name}
+					</span>
+					<span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{snippetOf(email)}</span>
+				</span>
+				{hasAttachments && <Paperclip className="size-3.5 shrink-0 text-muted-foreground" aria-label="Has attachments" />}
+				{email.starred && <Star className="size-3.5 shrink-0 fill-warning text-warning" aria-label="Starred" />}
+				<MessageDate date={email.date} short />
+			</button>
 		);
 	}
 
+	const recipients = shortRecipients(email.recipient, email.cc, selfAddress);
+
 	return (
-		<div className={`group/thread-msg ${containerClassName}`}>
-			<div className="px-4 py-4 md:px-6">
-				<div className="flex items-center justify-between gap-3 mb-3">
-					<div className="flex items-center gap-2.5 min-w-0">
-						<button
-							type="button"
-							onClick={onToggleExpand}
-							className="shrink-0"
-							aria-label="Collapse message"
+		<article className="px-4 pt-3 pb-5 md:px-6" aria-label={`Message from ${sender.name}`}>
+			<div className="flex items-start gap-3">
+				<SenderAvatar sender={email.sender} className="mt-0.5 size-9" />
+				<div className="min-w-0 flex-1">
+					<div className="flex items-start gap-2">
+						{/* The header toggles the message, like Gmail; the buttons on the right don't. */}
+						<div
+							className={cn("min-w-0 flex-1", canCollapse && "cursor-pointer")}
+							onClick={canCollapse ? onToggleExpand : undefined}
 						>
-							<div className="cursor-pointer hover:ring-2 hover:ring-kumo-brand/30 transition-shadow rounded-full">
-								<Avatar isDraft={isDraft} isSelf={isSelf} sender={email.sender} />
+							<div className="flex min-w-0 items-baseline gap-1.5">
+								<span className="truncate text-sm font-semibold text-foreground">{sender.name}</span>
+								{sender.hasName && (
+									<span className="truncate text-xs text-muted-foreground">&lt;{sender.address}&gt;</span>
+								)}
 							</div>
-						</button>
-						<div className="min-w-0">
-							<div className="flex items-center gap-2">
-								<span className="text-sm font-medium text-kumo-default truncate">
-									{senderLabel}
-								</span>
-								{isDraft && <Badge variant="outline">Draft</Badge>}
-							</div>
-							<div className="text-xs text-kumo-subtle">To: {email.recipient}</div>
+							{recipients && (
+								<button
+									type="button"
+									onClick={(e) => {
+										e.stopPropagation();
+										setShowDetails((v) => !v);
+									}}
+									className="-ml-1 flex max-w-full items-center gap-0.5 rounded px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+									aria-expanded={showDetails}
+									aria-label={showDetails ? "Hide details" : "Show details"}
+								>
+									<span className="truncate">{recipients}</span>
+									<ChevronDown className={cn("size-3.5 shrink-0 transition-transform", showDetails && "rotate-180")} />
+								</button>
+							)}
+						</div>
+						<div className="flex shrink-0 items-center gap-0.5">
+							<span className="mr-1 hidden sm:inline">
+								<MessageDate date={email.date} />
+							</span>
+							<IconTooltip label={email.starred ? "Starred" : "Not starred"}>
+								<Button variant="ghost" size="icon-sm" onClick={onToggleStar} aria-label={email.starred ? "Unstar message" : "Star message"} aria-pressed={email.starred}>
+									<Star className={cn(email.starred && "fill-warning text-warning")} />
+								</Button>
+							</IconTooltip>
+							<IconTooltip label="Reply">
+								<Button variant="ghost" size="icon-sm" onClick={onReply} aria-label="Reply">
+									<Reply />
+								</Button>
+							</IconTooltip>
+							<DropdownMenu>
+								<IconTooltip label="More">
+									<DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More message actions" />}>
+										<MoreVertical />
+									</DropdownMenuTrigger>
+								</IconTooltip>
+								<DropdownMenuContent align="end" className="w-48">
+									<DropdownMenuItem onClick={onReply}>
+										<Reply />
+										Reply
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={onReplyAll}>
+										<ReplyAll />
+										Reply all
+									</DropdownMenuItem>
+									<DropdownMenuItem onClick={onForward}>
+										<Forward />
+										Forward
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuItem onClick={onShowOriginal}>
+										<Code />
+										Show original
+									</DropdownMenuItem>
+									<DropdownMenuItem variant="destructive" onClick={onDelete}>
+										<Trash2 />
+										Delete this message
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</div>
 					</div>
-					<div className="flex items-center gap-1 shrink-0">
-						<span className="text-xs text-kumo-subtle">
-							{formatShortDate(email.date)}
-						</span>
-						{onViewSource && (
-							<Tooltip content="Headers" side="bottom" asChild>
-								<Button
-									variant="ghost"
-									shape="square"
-									size="sm"
-									icon={<CodeIcon size={14} />}
-									onClick={onViewSource}
-									aria-label="Headers"
-									className="transition-opacity !h-6 !w-6"
-								/>
-							</Tooltip>
-						)}
-						<button
-							type="button"
-							onClick={onToggleExpand}
-							className="ml-1"
-							aria-label="Collapse message"
-						>
-							<CaretUpIcon
-								size={14}
-								className="text-kumo-subtle hover:text-kumo-default transition-colors"
-							/>
-						</button>
+
+					{showDetails && (
+						<dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+							<DetailRow label="from" value={email.sender} />
+							<DetailRow label="to" value={email.recipient} />
+							<DetailRow label="cc" value={email.cc} />
+							<DetailRow label="bcc" value={email.bcc} />
+							<DetailRow label="date" value={formatDetailDate(email.date)} />
+							<DetailRow label="subject" value={email.subject} />
+						</dl>
+					)}
+
+					<div className="mt-3">
+						<MessageBody email={email} mailboxId={mailboxId} />
 					</div>
+
+					<EmailAttachmentList
+						mailboxId={mailboxId}
+						emailId={email.id}
+						attachments={email.attachments}
+						onPreviewImage={onPreviewImage}
+						className="mt-4 border-t border-border pt-3"
+						showHeading
+					/>
 				</div>
-
-				<div className="md:ml-[42px]">
-					<MessageBody email={email} mailboxId={mailboxId} />
-				</div>
-
-				{isDraft && (onSendDraft || onEditDraft || onDeleteDraft) && (
-					<div className="flex gap-2 mt-3 md:ml-[42px]">
-						{onSendDraft && (
-							<Button
-								variant="primary"
-								size="sm"
-								icon={<PaperPlaneTiltIcon size={14} />}
-								onClick={onSendDraft}
-								loading={isSending}
-								disabled={isSending}
-							>
-								{isSending ? "Sending..." : "Send"}
-							</Button>
-						)}
-						{onEditDraft && (
-							<Button
-								variant="secondary"
-								size="sm"
-								icon={<PencilSimpleIcon size={14} />}
-								onClick={onEditDraft}
-								disabled={isSending}
-							>
-								Edit
-							</Button>
-						)}
-						{onDeleteDraft && (
-							<Button
-								variant="ghost"
-								size="sm"
-								icon={<TrashIcon size={14} />}
-								onClick={onDeleteDraft}
-								disabled={isSending}
-							>
-								Discard
-							</Button>
-						)}
-					</div>
-				)}
-
-				<EmailAttachmentList
-					mailboxId={mailboxId}
-					emailId={email.id}
-					attachments={email.attachments}
-					onPreviewImage={onPreviewImage}
-					className="mt-3 md:ml-[42px]"
-				/>
 			</div>
-		</div>
+		</article>
 	);
 }

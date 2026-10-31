@@ -2,26 +2,30 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import {
-	Button,
-	Empty,
-	LinkProvider,
-	Loader,
-	Toasty,
-	TooltipProvider,
-} from "@cloudflare/kumo";
-import { WarningIcon } from "@phosphor-icons/react";
+import { TriangleAlert } from "lucide-react";
 import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { forwardRef, useState } from "react";
+import { useState } from "react";
 import {
 	isRouteErrorResponse,
 	Links,
 	Meta,
 	Outlet,
-	Link as RouterLink,
 	Scripts,
 	ScrollRestoration,
 } from "react-router";
+import { Toaster } from "sonner";
+import { Button } from "~/components/ui/button";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "~/components/ui/empty";
+import { Spinner } from "~/components/ui/spinner";
+import { TooltipProvider } from "~/components/ui/tooltip";
+import { themePreferenceInitScript, useThemePreference } from "~/lib/theme";
 import { ApiError } from "~/services/api";
 import "./index.css";
 
@@ -63,23 +67,13 @@ function getQueryClient() {
 	return browserQueryClient;
 }
 
-const KumoLink = forwardRef<
-	HTMLAnchorElement,
-	React.AnchorHTMLAttributes<HTMLAnchorElement> & { href?: string }
->(function KumoLink({ href, ...props }, ref) {
-	if (href && !href.startsWith("http")) {
-		return (
-			<RouterLink to={href} ref={ref} {...(props as Record<string, unknown>)} />
-		);
-	}
-	return <a href={href} ref={ref} {...props} />;
-});
-
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en">
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				<meta charSet="UTF-8" />
+				{/* Before any paint: the theme from localStorage or the system (no flash). */}
+				<script dangerouslySetInnerHTML={{ __html: themePreferenceInitScript }} />
 				<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 				<link
 					rel="icon"
@@ -92,7 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Meta />
 				<Links />
 			</head>
-			<body className="bg-kumo-recessed text-kumo-default antialiased">
+			<body className="bg-background text-foreground antialiased">
 				{children}
 				<ScrollRestoration />
 				<Scripts />
@@ -103,9 +97,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export function HydrateFallback() {
 	return (
-		<div className="flex items-center justify-center h-screen">
-			<Loader size="lg" />
+		<div className="flex h-screen items-center justify-center text-muted-foreground">
+			<Spinner className="size-6" />
 		</div>
+	);
+}
+
+/**
+ * Toasts in the app's theme, bottom-left (Gmail's corner). Sonner's "system"
+ * follows prefers-color-scheme exactly as the app's "system" preference does.
+ */
+function ThemedToaster() {
+	const { themePreference } = useThemePreference();
+	return (
+		<Toaster
+			theme={themePreference}
+			position="bottom-left"
+			mobileOffset={{ bottom: 16 }}
+		/>
 	);
 }
 
@@ -115,13 +124,10 @@ export default function App() {
 	const [queryClient] = useState(getQueryClient);
 	return (
 		<QueryClientProvider client={queryClient}>
-			<LinkProvider component={KumoLink}>
-				<TooltipProvider>
-					<Toasty>
-						<Outlet />
-					</Toasty>
-				</TooltipProvider>
-			</LinkProvider>
+			<TooltipProvider>
+				<Outlet />
+				<ThemedToaster />
+			</TooltipProvider>
 		</QueryClientProvider>
 	);
 }
@@ -144,22 +150,25 @@ export function ErrorBoundary({ error }: { error: unknown }) {
 	}
 
 	return (
-		<div className="flex items-center justify-center min-h-screen p-8">
-			<Empty
-				icon={<WarningIcon size={48} className="text-kumo-inactive" />}
-				title={title}
-				description={description}
-				contents={
+		<div className="flex min-h-screen items-center justify-center p-8">
+			<Empty>
+				<EmptyHeader>
+					<EmptyMedia variant="icon">
+						<TriangleAlert />
+					</EmptyMedia>
+					<EmptyTitle>{title}</EmptyTitle>
+					{description && <EmptyDescription>{description}</EmptyDescription>}
+				</EmptyHeader>
+				<EmptyContent>
 					<Button
-						variant="primary"
 						onClick={() => {
 							window.location.href = "/";
 						}}
 					>
 						Back to mailboxes
 					</Button>
-				}
-			/>
+				</EmptyContent>
+			</Empty>
 		</div>
 	);
 }

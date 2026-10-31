@@ -2,46 +2,39 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Button, Tooltip } from "@cloudflare/kumo";
-import {
-	CheckIcon,
-	CopyIcon,
-	PlugsIcon,
-	WrenchIcon,
-} from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Check, ChevronRight, Copy, Plug } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { meQuery } from "~/services/api";
 
-function CopyButton({ text }: { text: string }) {
+/** An icon button that copies `value`, with a toast and a check mark for two seconds (OpenCRM's CopyButton). */
+function CopyButton({ value, label }: { value: string; label: string }) {
 	const [copied, setCopied] = useState(false);
+	const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-	const handleCopy = async () => {
+	const copy = async () => {
 		try {
-			await navigator.clipboard.writeText(text);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 2000);
+			await navigator.clipboard.writeText(value);
 		} catch {
-			// Clipboard API unavailable or permission denied — ignore silently
+			toast.error("Could not copy.");
+			return;
 		}
+		toast.success("Copied to clipboard");
+		setCopied(true);
+		clearTimeout(resetTimer.current);
+		resetTimer.current = setTimeout(() => setCopied(false), 2000);
 	};
 
 	return (
-		<Tooltip content={copied ? "Copied" : "Copy"} asChild>
-			<Button
-				variant="ghost"
-				shape="square"
-				size="sm"
-				icon={
-					copied ? (
-						<CheckIcon size={12} weight="bold" className="text-kumo-success" />
-					) : (
-						<CopyIcon size={12} />
-					)
-				}
-				onClick={handleCopy}
-				aria-label="Copy to clipboard"
-			/>
+		<Tooltip>
+			<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={label} onClick={copy} />}>
+				{copied ? <Check className="text-success" /> : <Copy />}
+			</TooltipTrigger>
+			<TooltipContent>{copied ? "Copied" : "Copy"}</TooltipContent>
 		</Tooltip>
 	);
 }
@@ -50,37 +43,38 @@ function CopyButton({ text }: { text: string }) {
  * The tools MCP clients see: a static copy of the names in the app's tool
  * catalog (workers/everyapp/tools.ts), less `delete_email`, which the gateway
  * hides from AI clients until it has approvals. test/tools.test.ts keeps this
- * list in step with the catalog.
+ * list in step with the catalog. `risk` is the catalog's.
  */
 export const MCP_TOOLS = [
-	{ name: "list_mailboxes", desc: "List mailboxes" },
-	{ name: "list_emails", desc: "List emails in a folder" },
-	{ name: "get_email", desc: "Read a full email with body" },
-	{ name: "get_thread", desc: "Load a conversation thread" },
-	{ name: "search_emails", desc: "Search emails by query" },
-	{ name: "draft_reply", desc: "Draft a reply to an email" },
-	{ name: "create_draft", desc: "Create a new draft" },
-	{ name: "update_draft", desc: "Edit a draft" },
-	{ name: "send_reply", desc: "Send a reply" },
-	{ name: "send_email", desc: "Send a new email" },
-	{ name: "mark_email_read", desc: "Mark email as read/unread" },
-	{ name: "move_email", desc: "Move email to a folder" },
+	{ name: "list_mailboxes", desc: "List mailboxes", risk: "read" },
+	{ name: "list_emails", desc: "List emails in a folder", risk: "read" },
+	{ name: "get_email", desc: "Read a full email with body", risk: "read" },
+	{ name: "get_thread", desc: "Load a conversation thread", risk: "read" },
+	{ name: "search_emails", desc: "Search emails by query", risk: "read" },
+	{ name: "draft_reply", desc: "Draft a reply to an email", risk: "write" },
+	{ name: "create_draft", desc: "Create a new draft", risk: "write" },
+	{ name: "update_draft", desc: "Edit a draft", risk: "write" },
+	{ name: "send_reply", desc: "Send a reply", risk: "write" },
+	{ name: "send_email", desc: "Send a new email", risk: "write" },
+	{ name: "mark_email_read", desc: "Mark email as read/unread", risk: "write" },
+	{ name: "move_email", desc: "Move email to a folder", risk: "write" },
+	{ name: "list_labels", desc: "List labels", risk: "read" },
+	{ name: "create_label", desc: "Create a label", risk: "write" },
+	{ name: "label_conversation", desc: "Add or remove a conversation's labels", risk: "write" },
 ] as const;
 
-function UrlField({ label, url }: { label: string; url: string }) {
+/** A titled card with a value to paste and its copy button, and notes under it. */
+function CopyCard({ title, value, children }: { title: string; value: string; children?: ReactNode }) {
 	return (
-		<div className="space-y-1.5">
-			<label className="text-xs font-medium text-kumo-strong block">
-				{label}
-			</label>
-			<div className="relative group">
-				<div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-					<CopyButton text={url} />
-				</div>
-				<div className="bg-kumo-recessed text-kumo-default font-mono text-[11px] px-3 py-2.5 pr-10 rounded-lg border border-kumo-line [overflow-wrap:anywhere] leading-relaxed">
-					{url}
-				</div>
+		<div className="rounded-xl border border-border bg-card p-3 shadow-xs">
+			<div className="mb-2 text-xs font-medium">{title}</div>
+			<div className="flex items-start gap-1 rounded-lg bg-muted py-1.5 pr-1 pl-2.5">
+				<code className="min-w-0 flex-1 self-center py-0.5 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere]">
+					{value}
+				</code>
+				<CopyButton value={value} label={`Copy ${title}`} />
 			</div>
+			{children ? <div className="mt-2 space-y-1 text-xs text-muted-foreground">{children}</div> : null}
 		</div>
 	);
 }
@@ -97,124 +91,101 @@ function UrlField({ label, url }: { label: string; url: string }) {
  */
 export default function MCPPanel() {
 	const { data: me } = useQuery({ ...meQuery, retry: false });
-	const appOrigin =
-		typeof window !== "undefined" ? window.location.origin : "https://openmail.your-gateway.example";
+	const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://openmail.your-gateway.example";
 	const gatewayOrigin = me?.gatewayUrl?.replace(/\/+$/, "");
 	const gatewayMcpUrl = gatewayOrigin ? `${gatewayOrigin}/mcp` : null;
 	const appMcpUrl = `${appOrigin}/mcp`;
 
 	return (
-		<div className="flex flex-col h-full">
-			{/* Content */}
-			<div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-				{/* Intro */}
-				<div className="space-y-2">
-					<div className="flex items-center gap-2">
-						<div className="flex h-10 w-10 items-center justify-center rounded-xl bg-kumo-brand/10">
-							<PlugsIcon
-								size={20}
-								weight="duotone"
-								className="text-kumo-brand"
-							/>
-						</div>
-						<div>
-							<h3 className="text-sm font-semibold text-kumo-default">
-								Connect an AI client
-							</h3>
-						</div>
-					</div>
-					<p className="text-xs text-kumo-subtle leading-relaxed">
-						A connected assistant can read, search, draft and send from
-						this organization's mailboxes, as you.
-					</p>
+		<div className="h-full space-y-4 overflow-y-auto px-3 py-4">
+			<div className="flex gap-3">
+				<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+					<Plug className="size-4" aria-hidden />
 				</div>
-
-				{/* MCP URLs */}
-				{gatewayMcpUrl && (
-					<div className="space-y-1">
-						<UrlField label="Every App connector" url={gatewayMcpUrl} />
-						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-							One address for all your apps.
-						</p>
-					</div>
-				)}
-				{gatewayMcpUrl && (
-					<div className="space-y-1">
-						<UrlField
-							label="Claude Code"
-							url={`claude mcp add --transport http everyapp ${gatewayMcpUrl}`}
-						/>
-						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-							Then in Claude Code: /mcp → everyapp → Authenticate.
-						</p>
-						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-							claude.ai, ChatGPT and Cursor: add the connector URL as
-							a custom connector or MCP server and sign in when asked.
-						</p>
-					</div>
-				)}
-				<details className="space-y-1">
-					<summary className="text-xs font-medium text-kumo-strong cursor-pointer">
-						Using a personal access token instead
-					</summary>
-					<div className="space-y-1 pt-1">
-						<UrlField label="This app only" url={appMcpUrl} />
-						<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-							Connect with a personal access token from the gateway,
-							sent as <code className="font-mono">Authorization: Bearer epat_…</code>.
-							{gatewayOrigin ? (
-								<>
-									{" "}Create one on the gateway under{" "}
-									<a
-										href={`${gatewayOrigin}/admin/tokens`}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="text-kumo-link hover:text-kumo-link-hover"
-									>
-										Tokens
-									</a>
-									.
-								</>
-							) : (
-								" Create one on your gateway under Tokens."
-							)}
-						</p>
-					</div>
-				</details>
-
-				{/* Available tools */}
-				<div className="space-y-2">
-					<h4 className="text-xs uppercase tracking-wider font-semibold text-kumo-subtle px-0.5">
-						Available Tools
-					</h4>
-					<div className="border border-kumo-line rounded-lg divide-y divide-kumo-line">
-						{MCP_TOOLS.map((tool) => (
-							<div
-								key={tool.name}
-								className="flex items-center gap-2.5 px-3 py-2"
-							>
-								<WrenchIcon
-									size={12}
-									weight="bold"
-									className="text-kumo-brand shrink-0"
-								/>
-								<div className="min-w-0 flex-1">
-									<span className="text-xs font-mono font-medium text-kumo-default">
-										{tool.name}
-									</span>
-								</div>
-								<span className="text-[11px] text-kumo-subtle shrink-0">
-									{tool.desc}
-								</span>
-							</div>
-						))}
-					</div>
-					<p className="text-[11px] text-kumo-subtle leading-relaxed px-0.5">
-						Draft tools never send. Send tools send at once, as you. No
-						tool deletes email.
+				<div className="min-w-0 space-y-0.5">
+					<h3 className="text-sm font-semibold">Connect an AI client</h3>
+					<p className="text-xs text-muted-foreground">
+						A connected assistant can read, search, draft and send from this organization's mailboxes, as you.
 					</p>
 				</div>
 			</div>
+
+			{gatewayMcpUrl && (
+				<CopyCard title="Every App connector" value={gatewayMcpUrl}>
+					<p>One address for all your apps.</p>
+				</CopyCard>
+			)}
+			{gatewayMcpUrl && (
+				<CopyCard title="Claude Code" value={`claude mcp add --transport http everyapp ${gatewayMcpUrl}`}>
+					<p>Then in Claude Code: /mcp → everyapp → Authenticate.</p>
+					<p>
+						claude.ai, ChatGPT and Cursor: add the connector URL as a custom connector or MCP server and sign in when
+						asked.
+					</p>
+				</CopyCard>
+			)}
+
+			<details className="group rounded-xl border border-border bg-card shadow-xs">
+				<summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+					<ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+					Using a personal access token instead
+				</summary>
+				<div className="space-y-2 px-3 pb-3">
+					<div className="flex items-start gap-1 rounded-lg bg-muted py-1.5 pr-1 pl-2.5">
+						<code className="min-w-0 flex-1 self-center py-0.5 font-mono text-[11px] leading-relaxed [overflow-wrap:anywhere]">
+							{appMcpUrl}
+						</code>
+						<CopyButton value={appMcpUrl} label="Copy this app's MCP URL" />
+					</div>
+					<p className="text-xs text-muted-foreground">
+						This app only. Connect with a personal access token from the gateway, sent as{" "}
+						<code className="font-mono text-foreground">Authorization: Bearer epat_…</code>.
+						{gatewayOrigin ? (
+							<>
+								{" "}
+								Create one on the gateway under{" "}
+								<a
+									href={`${gatewayOrigin}/admin/tokens`}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="text-primary underline-offset-2 hover:underline"
+								>
+									Tokens
+								</a>
+								.
+							</>
+						) : (
+							" Create one on your gateway under Tokens."
+						)}
+					</p>
+				</div>
+			</details>
+
+			<section className="space-y-2">
+				<h4 className="px-0.5 text-xs font-medium text-muted-foreground">Available tools</h4>
+				<div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+					<table className="w-full text-xs">
+						<tbody className="divide-y divide-border">
+							{MCP_TOOLS.map((tool) => (
+								<tr key={tool.name}>
+									<td className="py-1.5 pr-2 pl-3 align-top">
+										<div className="font-mono font-medium">{tool.name}</div>
+										<div className="text-muted-foreground">{tool.desc}</div>
+									</td>
+									<td className="py-1.5 pr-3 text-right align-top">
+										<Badge variant={tool.risk === "read" ? "secondary" : "warning"} size="sm" className="uppercase">
+											{tool.risk}
+										</Badge>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+				<p className="px-0.5 text-xs text-muted-foreground">
+					Draft tools never send. Send tools send at once, as you. No tool deletes email.
+				</p>
+			</section>
 		</div>
 	);
 }

@@ -15,8 +15,10 @@
  *   has:attachment             — filter by attachment presence
  *   before:2025-01-01         — emails before date
  *   after:2025-01-01          — emails after date
+ *   label:Work                — conversations carrying a label (by name)
  *
  * Quoted values are supported: from:"John Doe" subject:"Re: Hello"
+ * label:"Work/Reports"
  * Everything that isn't an operator becomes the free-text query.
  */
 
@@ -31,11 +33,13 @@ export interface ParsedSearch {
 	has_attachment?: boolean;
 	date_start?: string;
 	date_end?: string;
+	/** A label's name (the server also accepts its id). */
+	label?: string;
 }
 
 // Matches operator:value or operator:"quoted value"
 const OPERATOR_RE =
-	/\b(from|to|subject|in|is|has|before|after):(?:"([^"]*?)"|(\S+))/gi;
+	/\b(from|to|subject|in|is|has|before|after|label):(?:"([^"]*?)"|(\S+))/gi;
 
 export function parseSearchQuery(input: string): ParsedSearch {
 	const result: ParsedSearch = { query: "" };
@@ -103,6 +107,9 @@ export function parseSearchQuery(input: string): ParsedSearch {
 				break;
 			case "after":
 				result.date_start = normalizeDate(value);
+				break;
+			case "label":
+				if (value.trim()) result.label = value.trim();
 				break;
 		}
 	}

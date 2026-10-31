@@ -2,10 +2,11 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import { Banner } from "@cloudflare/kumo";
-import { WarningIcon } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
+import { TriangleAlert } from "lucide-react";
 import { useParams } from "react-router";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { cn } from "~/lib/cn";
 import { queryKeys } from "~/queries/keys";
 import api, { meQuery } from "~/services/api";
 
@@ -18,7 +19,7 @@ import api, { meQuery } from "~/services/api";
  * whom to ask. Send stays enabled: the server decides, and its refusal lands
  * in the composer's error slot above this one.
  */
-export default function SendingOffBanner() {
+export default function SendingOffBanner({ className }: { className?: string } = {}) {
 	const { data: config } = useQuery({
 		queryKey: queryKeys.config,
 		queryFn: () => api.getConfig(),
@@ -53,11 +54,10 @@ export default function SendingOffBanner() {
 	);
 
 	return (
-		<Banner
-			variant="alert"
-			icon={<WarningIcon size={18} weight="fill" />}
-			title="Sending is off"
-			description={description}
-		/>
+		<Alert variant="warning" className={cn("text-xs", className)}>
+			<TriangleAlert />
+			<AlertTitle className="text-sm">Sending is off</AlertTitle>
+			<AlertDescription className="text-xs text-foreground/80">{description}</AlertDescription>
+		</Alert>
 	);
 }

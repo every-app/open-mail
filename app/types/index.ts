@@ -23,6 +23,29 @@ export interface Mailbox {
 	settings?: MailboxSettings;
 }
 
+/** A label's colors: the eight tag-chip tones (workers/everyapp/mailbox.ts). */
+export type LabelColor =
+	| "slate"
+	| "rose"
+	| "amber"
+	| "lime"
+	| "emerald"
+	| "sky"
+	| "violet"
+	| "fuchsia";
+
+/** A Gmail-style label; names may nest with `/` (`Work/Reports`). */
+export interface Label {
+	id: string;
+	name: string;
+	color: LabelColor;
+}
+
+/** `GET …/labels`: a label with its conversations that have unread mail. */
+export interface LabelWithCount extends Label {
+	unreadCount: number;
+}
+
 export interface Email {
 	id: string;
 	thread_id?: string | null;
@@ -48,6 +71,8 @@ export interface Email {
 	participants?: string;
 	needs_reply?: boolean;
 	has_draft?: boolean;
+	/** The conversation's labels (list rows, search results, single email and thread reads). */
+	labels?: Label[];
 }
 
 export interface Attachment {

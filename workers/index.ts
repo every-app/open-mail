@@ -21,6 +21,7 @@ import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
 import { discardAttachments, emailConfig, sendFailure } from "./everyapp/email";
+import { labelRoutes } from "./everyapp/labels";
 
 type AppContext = Context<MailboxContext>;
 
@@ -83,6 +84,8 @@ app.use("/api/*", cors({
 	},
 }));
 app.use("/api/v1/mailboxes/:mailboxId/*", requireMailbox);
+// Every App: labels (workers/everyapp/labels.ts), ahead of the email routes.
+app.route("/", labelRoutes);
 
 // -- Config ---------------------------------------------------------
 

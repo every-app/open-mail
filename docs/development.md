@@ -14,7 +14,7 @@ pnpm everyapp dev                           # http://openmail.localhost:8787, si
 
 ## Stack
 
-- **Frontend:** React 19, React Router v7, Tailwind CSS, Zustand, TipTap, `@cloudflare/kumo`
+- **Frontend:** React 19, React Router v7, Tailwind CSS with the Every App kit (shadcn on Base UI, lucide, sonner; `docs/UI.md`), Zustand, TipTap
 - **Backend:** Hono, Cloudflare Workers, Durable Objects (SQLite), R2, Email Routing
 - **AI Agent:** Cloudflare Agents SDK (`AIChatAgent`), AI SDK v6, the Every App gateway's default model (the operator's provider and model), or a pinned OpenRouter or Workers AI, `react-markdown` + `remark-gfm`
 - **Auth:** the Every App gateway's signed identity, checked by `everyApp()` on every request

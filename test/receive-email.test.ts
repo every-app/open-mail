@@ -161,19 +161,42 @@ describe("inbound mail: email() and receiveEmail()", () => {
 		// The RPC type of getThreadEmails' rows is too deep for tsc (upstream's
 		// routes cast the stub to any for it, too).
 		const stub = mailbox(address) as unknown as { getThreadEmails(id: string): Promise<{ message_id: string }[]> };
-		const thread = await stub.getThreadEmails(FIXTURE_ID);
+		// The replies join the first message's conversation (the port's
+		// createEmail(), workers/everyapp/mailbox.ts), keyed by its id; the
+		// Message-ID upstream hands the agent as the thread id names it too.
+		const first = (await mailbox(address).getEmails({ folder: "inbox" })).find((e) => e.subject === "Question about my order")!;
+		const thread = await stub.getThreadEmails(first.id);
 		expect(thread.map((e) => e.message_id).sort()).toEqual([
 			"order-1042-followup@example.org",
+			FIXTURE_ID,
 			"order-1042-second@example.org",
 		]);
+		expect((await stub.getThreadEmails(FIXTURE_ID)).map((e) => e.message_id).sort()).toEqual(
+			thread.map((e) => e.message_id).sort(),
+		);
 		const byId = Object.fromEntries(thread.map((e) => [e.message_id, e]));
-		expect(byId["order-1042-followup@example.org"]).toMatchObject({ in_reply_to: FIXTURE_ID, email_references: null, thread_id: FIXTURE_ID });
+		expect(byId["order-1042-followup@example.org"]).toMatchObject({ in_reply_to: FIXTURE_ID, email_references: null, thread_id: first.id });
 		expect(byId["order-1042-second@example.org"]).toMatchObject({
 			in_reply_to: "order-1042-followup@example.org",
 			email_references: JSON.stringify([FIXTURE_ID, "order-1042-followup@example.org"]),
-			thread_id: FIXTURE_ID,
+			thread_id: first.id,
 		});
 		expect(await mailbox(address).getEmails({ folder: "inbox" })).toHaveLength(3);
+		const threaded = mailbox(address) as unknown as { getThreadedEmails(o: { folder: string }): Promise<unknown[]> };
+		expect(await threaded.getThreadedEmails({ folder: "inbox" })).toHaveLength(1);
+	});
+
+	it("dates a message by its Date header, or by its arrival when that is missing or in the future", async () => {
+		const address = await newMailbox();
+		await deliver(fixtureTo(address));
+		const before = Date.now();
+		await deliver(
+			plainMessage({ From: "bob@example.org", To: address, Subject: "From the future", "Message-ID": "<future@example.org>", Date: "Fri, 1 Jan 2100 00:00:00 +0000" }),
+		);
+		const bySubject = Object.fromEntries((await mailbox(address).getEmails({ folder: "inbox" })).map((e) => [e.subject, e.date]));
+		expect(bySubject["Question about my order"]).toBe("2026-10-17T09:30:00.000Z");
+		expect(Date.parse(bySubject["From the future"]!)).toBeGreaterThanOrEqual(before - 1000);
+		expect(Date.parse(bySubject["From the future"]!)).toBeLessThan(Date.parse("2100-01-01"));
 	});
 
 	it("ignores mail for an address that has no mailbox", async () => {

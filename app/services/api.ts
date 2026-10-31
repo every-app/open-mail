@@ -2,7 +2,7 @@
 // Licensed under the Apache 2.0 license found in the LICENSE file or at:
 //     https://opensource.org/licenses/Apache-2.0
 
-import type { Email, Folder, Mailbox } from "~/types";
+import type { Email, Folder, Label, LabelColor, LabelWithCount, Mailbox } from "~/types";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -243,7 +243,7 @@ const api = {
 			thread_id?: string;
 			draft_id?: string;
 		},
-	) => post<{ draft_id: string }>(`/api/v1/mailboxes/${mailboxId}/drafts`, draft),
+	) => post<{ id: string }>(`/api/v1/mailboxes/${mailboxId}/drafts`, draft),
 	replyToEmail: (mailboxId: string, emailId: string, email: unknown) =>
 		post<void>(`/api/v1/mailboxes/${mailboxId}/emails/${emailId}/reply`, email),
 	forwardEmail: (mailboxId: string, emailId: string, email: unknown) =>
@@ -258,6 +258,37 @@ const api = {
 		put<Folder>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`, { name }),
 	deleteFolder: (mailboxId: string, id: string) =>
 		del<void>(`/api/v1/mailboxes/${mailboxId}/folders/${id}`),
+
+	// Labels
+	listLabels: (mailboxId: string) =>
+		get<LabelWithCount[]>(`/api/v1/mailboxes/${mailboxId}/labels`),
+	createLabel: (mailboxId: string, label: { name: string; color?: LabelColor }) =>
+		post<Label>(`/api/v1/mailboxes/${mailboxId}/labels`, label),
+	updateLabel: (mailboxId: string, labelId: string, changes: { name?: string; color?: LabelColor }) =>
+		put<Label>(`/api/v1/mailboxes/${mailboxId}/labels/${labelId}`, changes),
+	deleteLabel: (mailboxId: string, labelId: string) =>
+		del<void>(`/api/v1/mailboxes/${mailboxId}/labels/${labelId}`),
+	/** Add and remove labels (ids) on a conversation: a thread id, or any email's id in it. */
+	setThreadLabels: (mailboxId: string, threadKey: string, changes: { add?: string[]; remove?: string[] }) =>
+		post<{ threadKey: string; labels: Label[] }>(
+			`/api/v1/mailboxes/${mailboxId}/threads/${encodeURIComponent(threadKey)}/labels`,
+			changes,
+		),
+	/** A label's conversations, threaded and paginated like a folder's. */
+	listLabelEmails: (
+		mailboxId: string,
+		labelId: string,
+		params: { page?: number; limit?: number } = {},
+		opts?: { signal?: AbortSignal },
+	) =>
+		get<EmailListResponse>(`/api/v1/mailboxes/${mailboxId}/emails`, {
+			params: {
+				label: labelId,
+				...(params.page ? { page: String(params.page) } : {}),
+				...(params.limit ? { limit: String(params.limit) } : {}),
+			},
+			signal: opts?.signal,
+		}),
 
 	// Search
 	searchEmails: (mailboxId: string, params: Record<string, string>) =>

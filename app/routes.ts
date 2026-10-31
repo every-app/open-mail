@@ -8,13 +8,16 @@ import {
 	route,
 } from "@react-router/dev/routes";
 
+// The open conversation is in the URL (docs/UI.md): `:emailId?` on each list.
+// Build these paths with useMailRoute() (app/hooks/useMailRoute.ts).
 export default [
 	index("routes/home.tsx"),
 	route("mailbox/:mailboxId", "routes/mailbox.tsx", [
 		index("routes/mailbox-index.tsx"),
-		route("emails/:folder", "routes/email-list.tsx"),
+		route("emails/:folder/:emailId?", "routes/email-list.tsx", { id: "folder-list" }),
+		route("labels/:labelId/:emailId?", "routes/email-list.tsx", { id: "label-list" }),
 		route("settings", "routes/settings.tsx"),
-		route("search", "routes/search-results.tsx"),
+		route("search/:emailId?", "routes/search-results.tsx"),
 	]),
 	route("*", "routes/not-found.tsx"),
 ] satisfies RouteConfig;

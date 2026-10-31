@@ -13,7 +13,17 @@ import { withNamedAgents } from "./everyapp/inbound";
 import { tools } from "./everyapp/tools";
 import type { Env } from "./types";
 
-export { MailboxDO } from "./durableObject";
+import type { MailboxDO as UpstreamMailboxDO } from "./durableObject";
+import { MailboxDO as LabeledMailboxDO } from "./everyapp/mailbox";
+
+// The port's subclass, under upstream's class name, so the MAILBOX binding
+// and its stored objects stay as they were: labels (workers/everyapp/mailbox.ts).
+// Typed as upstream's class: `cf workers types` types env.MAILBOX from this
+// export, and upstream's byte-identical helpers assign env.MAILBOX's stubs
+// to DurableObjectStub<upstream MailboxDO>, which TypeScript can't compare
+// against a subclass's stub (drizzle's `db` makes it "excessively deep").
+// The port's code reaches the label methods through mailboxStub() there.
+export const MailboxDO = LabeledMailboxDO as typeof UpstreamMailboxDO;
 export { EmailAgent } from "./agent";
 
 declare module "react-router" {

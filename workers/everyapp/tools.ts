@@ -11,9 +11,10 @@
  * for that one call (`chan: "mcp"`), which everyApp() verifies before any
  * handler runs. Tool calls get 30 seconds.
  *
- * The tools are upstream's thirteen (the deleted `EmailMCP` server), over the
+ * Thirteen tools are upstream's (the deleted `EmailMCP` server), over the
  * same lib/tools.ts functions the chat agent uses, which stay as upstream
- * wrote them. Each call runs with the caller's identity: withGateway(env,
+ * wrote them. Three are the port's: list_labels, create_label and
+ * label_conversation, over the labels in workers/everyapp/mailbox.ts. Each call runs with the caller's identity: withGateway(env,
  * request) attributes its model calls (the draft verifier) and its sends to
  * the person behind the MCP client.
  *
@@ -49,6 +50,7 @@ import {
 import type { Env } from "../types";
 import { withGateway } from "./gateway";
 import { requireOrganization } from "./identity";
+import { LABEL_COLORS, LABEL_NAME_MAX, type Label, labeledMailbox } from "./label-model";
 
 /** Guidance for the model across the tools (the gateway allows 2 KB; kept under 1 KB). */
 export const INSTRUCTIONS =
@@ -56,6 +58,7 @@ export const INSTRUCTIONS =
 	"Folders are inbox, sent, draft, archive and trash. " +
 	"draft_reply, create_draft and update_draft only save drafts, which a person reviews and sends from the inbox. " +
 	"send_reply and send_email send immediately, from the mailbox's own address: call them only after the person has confirmed the recipient and the text. " +
+	"Labels tag conversations (several each, names may nest with /); folders say where a message is. " +
 	"Bodies are HTML. Every call acts as the person who connected this client.";
 
 /**
@@ -73,6 +76,45 @@ export function plainSchema<T extends z.ZodObject>(schema: T): PlainToolSchema<z
 
 const mailboxId = z.string().min(1).describe("The mailbox's email address (its id, from list_mailboxes)");
 const emailId = z.string().min(1).describe("The email's id");
+const labelName = z.string().trim().min(1).max(LABEL_NAME_MAX);
+
+/**
+ * Label names or ids to label ids. Unknown names are created when `create`
+ * is set (with their default color), else they are the ToolError.
+ */
+async function resolveLabels(
+	stub: ReturnType<typeof labeledMailbox>,
+	refs: string[],
+	create: boolean,
+): Promise<Label[]> {
+	const labels: Label[] = [];
+	const missing: string[] = [];
+	for (const ref of refs) {
+		const found = await stub.findLabel(ref);
+		if (found) {
+			labels.push(found);
+			continue;
+		}
+		if (!create) {
+			missing.push(ref);
+			continue;
+		}
+		const created = await stub.createLabel(ref);
+		if (created.ok) labels.push(created.label);
+		else if (created.error === "invalid_name") throw new ToolError(`"${ref}" is not a valid label name (1 to ${LABEL_NAME_MAX} characters).`);
+		else {
+			const raced = await stub.findLabel(ref);
+			if (!raced) throw new ToolError(`Couldn't create the label "${ref}".`);
+			labels.push(raced);
+		}
+	}
+	if (missing.length > 0) {
+		throw new ToolError(
+			`No label named ${missing.map((m) => `"${m}"`).join(", ")}. Call list_labels for the mailbox's labels, or set createMissing to create them.`,
+		);
+	}
+	return labels;
+}
 
 /**
  * The longest answer a model call inside a tool may give. lib/ai.ts asks the
@@ -396,6 +438,76 @@ export const tools = defineTools(
 			handler: async ({ mailboxId, emailId, folderId }, context) => {
 				const env = await toolEnv(context);
 				return unwrap(await toolMoveEmail(env, await requireToolMailbox(env, mailboxId), emailId, folderId));
+			},
+		},
+
+		list_labels: {
+			title: "List labels",
+			description:
+				"List a mailbox's labels (id, name, color) with how many labeled conversations have unread mail. Labels tag conversations; a name with / is nested (Work/Reports).",
+			risk: "read",
+			input: plainSchema(z.object({ mailboxId })),
+			handler: async ({ mailboxId }, context) => {
+				const env = await toolEnv(context);
+				return labeledMailbox(env, await requireToolMailbox(env, mailboxId)).listLabels();
+			},
+		},
+
+		create_label: {
+			title: "Create a label",
+			description: "Create a label in a mailbox. Names are unique regardless of case; use / to nest (Work/Reports).",
+			risk: "write",
+			input: plainSchema(
+				z.object({
+					mailboxId,
+					name: labelName.describe(`The label's name, 1 to ${LABEL_NAME_MAX} characters`),
+					color: z.enum(LABEL_COLORS).optional().describe("The label's color (picked from the name when omitted)"),
+				}),
+			),
+			handler: async ({ mailboxId, name, color }, context) => {
+				const env = await toolEnv(context);
+				const result = await labeledMailbox(env, await requireToolMailbox(env, mailboxId)).createLabel(name, color);
+				if (result.ok) return result.label;
+				throw new ToolError(
+					result.error === "duplicate" ? `A label named "${name}" already exists.` : `"${name}" is not a valid label name.`,
+				);
+			},
+		},
+
+		label_conversation: {
+			title: "Label a conversation",
+			description:
+				"Add labels to and remove labels from a whole conversation (every message in it). Name labels by name or id; returns the conversation's labels.",
+			risk: "write",
+			idempotent: true,
+			input: plainSchema(
+				z.object({
+					mailboxId,
+					threadId: z.string().min(1).describe("The conversation's thread_id, or the id of any email in it"),
+					add: z.array(labelName).max(100).default([]).describe("Labels to add, by name or id"),
+					remove: z.array(labelName).max(100).default([]).describe("Labels to remove, by name or id"),
+					createMissing: z.boolean().default(false).describe("Create labels in `add` that don't exist yet"),
+				}),
+			),
+			handler: async ({ mailboxId, threadId, add, remove, createMissing }, context) => {
+				const env = await toolEnv(context);
+				const stub = labeledMailbox(env, await requireToolMailbox(env, mailboxId));
+				const notFound = `No conversation or email "${threadId}" in this mailbox.`;
+				// Before createMissing makes labels for a conversation that isn't there.
+				if (!(await stub.findConversation(threadId))) throw new ToolError(notFound);
+				const removing = await resolveLabels(stub, remove, false);
+				const adding = await resolveLabels(stub, add, createMissing);
+				const result = await stub.labelThread(
+					threadId,
+					adding.map((l) => l.id),
+					removing.map((l) => l.id),
+				);
+				if (result.ok) return { threadId: result.threadKey, labels: result.labels };
+				throw new ToolError(
+					result.error === "not_found"
+						? notFound
+						: `Unknown label: ${result.ids.join(", ")}.`,
+				);
 			},
 		},
 	},
