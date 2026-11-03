@@ -21,6 +21,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip
 import { cn } from "~/lib/cn";
 import { formatDetailDate, formatListDate, getNonInlineAttachments, stripHtml, useInlineImages } from "~/lib/utils";
 import type { Email } from "~/types";
+// Gmail (docs/GMAIL.md): the message's Gmail labels and the drafting status of the reply to it.
+import GmailMessageExtras from "~/components/gmail/GmailMessageExtras";
 
 export interface ThreadMessageActions {
 	onReply: () => void;
@@ -249,6 +251,7 @@ export default function ThreadMessage({
 						className="mt-4 border-t border-border pt-3"
 						showHeading
 					/>
+					<GmailMessageExtras mailboxId={mailboxId} email={email} showOpenInGmail={false} className="mt-3" />
 				</div>
 			</div>
 		</article>

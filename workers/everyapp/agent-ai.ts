@@ -22,6 +22,7 @@ import {
 	type UIMessage,
 	type UIMessageChunk,
 } from "ai";
+import { callFor } from "./attribution";
 import { aiProviderNotSetUpMessage, aiProviderSetupStep, isNotConfigured, providerIdOf, providerOf } from "./gateway";
 
 /**
@@ -61,7 +62,7 @@ export function aiNotSetUpMessage(env: Pick<Cloudflare.Env, "AI_PROVIDER">): str
  */
 export function aiSetupProblem(env: Cloudflare.Env, target?: GatewayCallFor): string | null {
 	try {
-		createGatewayFetch({ env, for: target });
+		createGatewayFetch({ env, for: callFor(target) });
 	} catch (error) {
 		if (error instanceof ConfigurationError) return aiNotSetUpMessage(env);
 		throw error;

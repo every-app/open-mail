@@ -5,16 +5,19 @@
  *
  * everyApp() (workers/app.ts) has verified the identity token the gateway
  * signs onto every request before any of this runs. The organization is the
- * authorization boundary: every member of the organization may open every
- * mailbox, read, search, draft, reply, forward, send, move and star; owners
- * and admins also create and delete mailboxes and edit their settings
- * (including the agent's system prompt). Nothing about members is stored:
- * the role comes from the signed token on each request, so when the gateway
- * removes someone it stops signing for them and nothing here still lets
- * them in.
+ * outer boundary. Inside it, a mailbox belongs to the person who created it
+ * (its settings' `ownerId`, docs/GMAIL.md): only they see it, read, search,
+ * draft, reply, forward, send, move and star in it, edit its settings and
+ * delete it, whatever their role. A mailbox without an owner (created
+ * before ownership existed) is shared with every member, and only owners
+ * and admins edit its settings or delete it. Owners and admins create
+ * native mailboxes. Nothing about members is stored: the role comes from
+ * the signed token on each request, so when the gateway removes someone it
+ * stops signing for them and nothing here still lets them in.
  */
 import type { EveryAppUser } from "@every-app/sdk/server";
 import type { MiddlewareHandler } from "hono";
+import { asSettings, canUseMailbox, readMailboxSettings } from "./mailbox-settings";
 
 /** The verified user of each request, set by the entry for the routes. */
 export const users = new WeakMap<Request, EveryAppUser | null>();
@@ -57,7 +60,8 @@ export function requireOrganization(
 
 /**
  * Hono middleware for the routes only owners and admins may use: creating
- * and deleting mailboxes and editing their settings.
+ * native mailboxes, editing and deleting shared ones, and the
+ * organization's settings.
  */
 export const requireAdmin: MiddlewareHandler = async (c, next) => {
 	const user = users.get(c.req.raw);
@@ -73,6 +77,53 @@ export const requireAdmin: MiddlewareHandler = async (c, next) => {
 		);
 	}
 	await next();
+};
+
+/** The mailbox a route names, decoded as upstream's `requireMailbox` decodes it. */
+export function routeMailboxId(raw: string | undefined): string | null {
+	if (!raw) return null;
+	try {
+		return decodeURIComponent(raw);
+	} catch {
+		return raw;
+	}
+}
+
+/**
+ * Hono middleware for `/api/v1/mailboxes/:mailboxId` and everything under
+ * it: a mailbox someone else owns answers 404, as one that doesn't exist
+ * does, so its address isn't confirmed either. A missing mailbox goes on to
+ * upstream's own 404.
+ */
+export const requireMailboxAccess: MiddlewareHandler<{ Bindings: Pick<Cloudflare.Env, "BUCKET"> }> = async (c, next) => {
+	const user = users.get(c.req.raw);
+	if (!user) return c.json({ error: "unauthenticated" }, 401);
+	const mailboxId = routeMailboxId(c.req.param("mailboxId"));
+	if (mailboxId) {
+		const settings = await readMailboxSettings(c.env.BUCKET, mailboxId);
+		if (settings !== null && !canUseMailbox(asSettings(settings), user.id)) {
+			return c.json({ error: "Not found" }, 404);
+		}
+	}
+	await next();
+};
+
+/**
+ * Hono middleware for editing a mailbox's settings and deleting it, after
+ * requireMailboxAccess: an owned mailbox's owner may (any role; nobody else
+ * gets this far), a shared one needs an owner or admin (requireAdmin).
+ */
+export const requireMailboxManager: MiddlewareHandler<{ Bindings: Pick<Cloudflare.Env, "BUCKET"> }> = async (c, next) => {
+	const user = users.get(c.req.raw);
+	if (!user) return c.json({ error: "unauthenticated" }, 401);
+	const mailboxId = routeMailboxId(c.req.param("mailboxId"));
+	const settings = mailboxId ? await readMailboxSettings(c.env.BUCKET, mailboxId) : null;
+	const ownerId = asSettings(settings).ownerId;
+	if (ownerId && ownerId === user.id) {
+		await next();
+		return;
+	}
+	return requireAdmin(c, next);
 };
 
 /**
@@ -123,9 +174,13 @@ export function me(user: EveryAppUser, env: object): Me {
  * found in env), so the check is against EMAIL_AGENT.
  *
  * The agent's name is the mailbox's address and its tools read and write
- * that mailbox, so it is reachable only for a mailbox that exists, as the
- * REST routes are (`requireMailbox`): a deleted mailbox's agent and data are
- * not reopened through the socket.
+ * that mailbox, so it is reachable only for a mailbox that exists and the
+ * caller may use, as the REST routes are (`requireMailbox`,
+ * `requireMailboxAccess`): a deleted mailbox's agent and data are not
+ * reopened through the socket, and someone else's mailbox answers as a
+ * missing one. partyserver hands the guard a copy of the request (to add its
+ * `x-partykit-*` headers), which the `users` map doesn't know, so the entry
+ * passes the caller in.
  *
  * `/onNewEmail` is the agent's internal entry for inbound mail
  * (`receiveEmail` calls it on the stub). It is already unreachable from
@@ -136,11 +191,14 @@ export async function agentGuard(
 	request: Request,
 	lobby: { className: string; name: string },
 	env: Pick<Cloudflare.Env, "BUCKET">,
+	user: Pick<EveryAppUser, "id"> | null | undefined,
 ): Promise<Response | undefined> {
 	if (lobby.className !== "EMAIL_AGENT") return notFound();
 	const path = new URL(request.url).pathname.replace(/\/+$/, "");
 	if (path.endsWith("/onNewEmail")) return notFound();
-	if (!(await env.BUCKET.head(`mailboxes/${lobby.name}.json`))) return notFound();
+	const settings = await env.BUCKET.get(`mailboxes/${lobby.name}.json`);
+	if (!settings) return notFound();
+	if (!user || !canUseMailbox(asSettings(await settings.json().catch(() => null)), user.id)) return notFound();
 	return undefined;
 }
 

@@ -32,6 +32,8 @@ import { queryKeys } from "~/queries/keys";
 import { useDeleteMailbox, useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 import api, { meQuery } from "~/services/api";
 import type { Mailbox } from "~/types";
+// Gmail (docs/GMAIL.md): the Google account and Reconnect.
+import GmailSettings from "~/components/gmail/GmailSettings";
 
 // An example shown in the empty textarea. The default instructions live in
 // workers/agent/index.ts (DEFAULT_SYSTEM_PROMPT).
@@ -75,7 +77,9 @@ export default function SettingsRoute() {
 	// as the home page does, once the role is known.
 	const { data: me } = useQuery(meQuery);
 	const isAdmin = me?.role === "owner" || me?.role === "admin";
-	const readOnly = me !== undefined && !isAdmin;
+	// Gmail (docs/GMAIL.md): an inbox's owner changes their own inbox too.
+	const ownerId = (mailbox?.settings as { ownerId?: string } | undefined)?.ownerId;
+	const readOnly = me !== undefined && !isAdmin && !(ownerId && ownerId === me.id);
 	useDocumentTitle("Settings", mailboxDisplayName(mailbox, mailboxId));
 
 	// Mailboxes listed in the config are the gateway's to keep: as on the
@@ -231,6 +235,8 @@ export default function SettingsRoute() {
 							</SettingsRow>
 						</SettingsCard>
 					</SettingsSection>
+
+					<GmailSettings mailbox={mailbox} />
 
 					<SettingsSection title="Appearance" description="Saved on this device, for every mailbox.">
 						<SettingsCard>

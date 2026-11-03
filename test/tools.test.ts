@@ -3,8 +3,8 @@
 // (`POST /__everyapp/tools/list` with a system token), then checked against
 // the ToolBus's catalog limits. Also: the MCP panel's static copy of the
 // names, the zod/v4 schemas as `{ jsonSchema, validate }`, the organization
-// pin and mailbox check every call goes through, and the cap on model calls
-// inside a tool. The calls themselves, against the real Durable Objects, are
+// pin and the mailbox check (it exists, the caller may use it) every call
+// goes through, and the cap on model calls inside a tool. The calls themselves, against the real Durable Objects, are
 // in tools.workers.test.ts.
 import { generateKeyPairSync } from "node:crypto";
 import {
@@ -24,6 +24,7 @@ import {
 	INSTRUCTIONS,
 	TOOL_MODEL_MAX_TOKENS,
 	estimatedTokens,
+	findToolMailbox,
 	plainSchema,
 	requireToolMailbox,
 	toolEnv,
@@ -52,6 +53,7 @@ const LIMITS = { schemaBytes: 20 * 1024, descriptionChars: 2048, titleChars: 100
 
 const READ = ["get_email", "get_thread", "list_emails", "list_labels", "list_mailboxes", "search_emails"];
 const WRITE = [
+	"archive_email",
 	"create_draft",
 	"create_label",
 	"draft_reply",
@@ -60,8 +62,11 @@ const WRITE = [
 	"move_email",
 	"send_email",
 	"send_reply",
+	"sync_mailbox",
 	"update_draft",
 ];
+/** The port's tools the MCP panel doesn't list yet: remove each as the panel gains it. */
+const NOT_IN_PANEL_YET: string[] = [];
 
 interface Descriptor {
 	name: string;
@@ -102,11 +107,12 @@ async function listCatalog(): Promise<Catalog> {
 }
 
 describe("the catalog the gateway snapshots", () => {
-	it("has upstream's thirteen tools and the port's three label tools, within the ToolBus's limits", async () => {
+	it("has upstream's thirteen tools, the port's three label tools and its two Gmail tools, within the ToolBus's limits", async () => {
 		const catalog = await listCatalog();
 		expect(catalog.warnings).toBeUndefined();
 		expect(catalog.hash).toMatch(/^sha256:[0-9a-f]{64}$/);
 		expect(catalog.tools.map((t) => t.name).sort()).toEqual([...READ, ...WRITE, "delete_email"].sort());
+		expect(catalog.tools).toHaveLength(18);
 		expect(catalog.instructions).toBe(INSTRUCTIONS);
 		expect(INSTRUCTIONS.length).toBeLessThanOrEqual(LIMITS.instructionsChars);
 		for (const tool of catalog.tools) {
@@ -128,12 +134,24 @@ describe("the catalog the gateway snapshots", () => {
 		expect(risks.delete_email).toBe("destructive");
 	});
 
-	it("the send tools reach outside the app; marking and moving can be repeated", async () => {
+	it("the send tools reach outside the app; marking, moving, archiving and labelling can be repeated", async () => {
 		const byName = Object.fromEntries((await listCatalog()).tools.map((t) => [t.name, t]));
 		expect(byName.send_email!.annotations).toEqual({ openWorldHint: true });
 		expect(byName.send_reply!.annotations).toEqual({ openWorldHint: true });
-		expect(byName.mark_email_read!.annotations).toEqual({ idempotentHint: true });
-		expect(byName.move_email!.annotations).toEqual({ idempotentHint: true });
+		for (const name of ["mark_email_read", "move_email", "archive_email", "label_conversation"]) {
+			expect(byName[name]!.annotations, name).toEqual({ idempotentHint: true });
+		}
+		expect(byName.sync_mailbox!.annotations).toBeUndefined();
+	});
+
+	it("the send tools say they refuse on Gmail; sync_mailbox says it works on Gmail mailboxes; the label tools cover Gmail's labels", async () => {
+		const byName = Object.fromEntries((await listCatalog()).tools.map((t) => [t.name, t]));
+		for (const name of ["send_email", "send_reply"]) expect(byName[name]!.description, name).toContain("Refuses on a Gmail mailbox");
+		expect(byName.sync_mailbox!.description).toContain("This tool works on Gmail mailboxes.");
+		for (const name of ["list_labels", "create_label", "label_conversation"]) {
+			expect(byName[name]!.description, name).toContain("On a Gmail mailbox");
+		}
+		expect(Object.keys(byName).filter((name) => name.includes("gmail"))).toEqual([]);
 	});
 
 	it("describes what a client sends: defaulted arguments are optional, mailboxId is required", async () => {
@@ -159,8 +177,9 @@ describe("the catalog the gateway snapshots", () => {
 
 	it("the MCP panel lists every tool an AI client can see, in step with the catalog", async () => {
 		const visible = (await listCatalog()).tools.filter((t) => t.risk !== "destructive").map((t) => t.name);
-		expect(visible).toHaveLength(15);
-		expect(MCP_TOOLS.map((t) => t.name).sort()).toEqual(visible.sort());
+		expect(visible).toHaveLength(17);
+		const panel = visible.filter((name) => !NOT_IN_PANEL_YET.includes(name));
+		expect(MCP_TOOLS.map((t) => t.name).sort()).toEqual(panel.sort());
 	});
 });
 
@@ -240,8 +259,10 @@ describe("what every call goes through", () => {
 		return verifyIdentityJwt(token, { audience: AUDIENCE, issuer: ISSUER, publicKeys: [publicKeyPem] } as never);
 	}
 
-	function bucket(keys: string[]) {
-		return { head: async (key: string) => (keys.includes(key) ? { key } : null) } as unknown as R2Bucket;
+	function bucket(objects: Record<string, unknown>) {
+		return {
+			get: async (key: string) => (key in objects ? { key, json: async () => objects[key] } : null),
+		} as unknown as R2Bucket;
 	}
 
 	it("the organization pin: another organization's caller is refused on an organization's own copy", async () => {
@@ -263,11 +284,31 @@ describe("what every call goes through", () => {
 	});
 
 	it("a mailbox must exist, as the REST routes require; ids are matched lowercase", async () => {
-		const env = { BUCKET: bucket(["mailboxes/team@example.com.json"]) };
-		expect(await requireToolMailbox(env, " Team@Example.com ")).toBe("team@example.com");
-		await expect(requireToolMailbox(env, "nobody@example.com")).rejects.toThrow(
+		const env = { BUCKET: bucket({ "mailboxes/team@example.com.json": { fromName: "Team" } }) };
+		const user = { id: "user_1" };
+		expect(await requireToolMailbox(env, " Team@Example.com ", user)).toBe("team@example.com");
+		await expect(requireToolMailbox(env, "nobody@example.com", user)).rejects.toThrow(
 			new ToolError('Mailbox "nobody@example.com" not found. Call list_mailboxes for the mailboxes you can use.'),
 		);
-		await expect(requireToolMailbox(env, "  ")).rejects.toBeInstanceOf(ToolError);
+		await expect(requireToolMailbox(env, "  ", user)).rejects.toBeInstanceOf(ToolError);
+	});
+
+	it("someone else's mailbox reads as a missing one; a shared one is everyone's", async () => {
+		const env = {
+			BUCKET: bucket({
+				"mailboxes/mine@example.com.json": { fromName: "Me", ownerId: "user_1" },
+				"mailboxes/theirs@example.com.json": { fromName: "Them", ownerId: "user_2" },
+				"mailboxes/team@example.com.json": { fromName: "Team" },
+			}),
+		};
+		expect(await findToolMailbox(env, "mine@example.com", { id: "user_1" })).toEqual({
+			mailbox: "mine@example.com",
+			settings: { fromName: "Me", ownerId: "user_1" },
+		});
+		await expect(requireToolMailbox(env, "theirs@example.com", { id: "user_1" })).rejects.toThrow(
+			new ToolError('Mailbox "theirs@example.com" not found. Call list_mailboxes for the mailboxes you can use.'),
+		);
+		expect(await requireToolMailbox(env, "team@example.com", { id: "user_2" })).toBe("team@example.com");
+		await expect(requireToolMailbox(env, "team@example.com", null)).rejects.toBeInstanceOf(ToolError);
 	});
 });

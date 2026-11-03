@@ -1,7 +1,8 @@
 // The auth seam (workers/everyapp/identity.ts) through the Worker's own entry
 // (workers/app.ts): identities minted the way the gateway mints them, the
 // real upstream API (workers/index.ts) over a fake R2 bucket and fake Durable
-// Object namespaces, and the chat agent's socket lifetime.
+// Object namespaces, and the chat agent's socket lifetime. Also who may use
+// which mailbox (its creator only, or everyone for a shared one).
 //
 // Node can't load `cloudflare:workers`, so the modules that need it are
 // stood in for: the Agents SDK's router (a stand-in that routes exactly as
@@ -169,9 +170,9 @@ function makeEnv(extra: Record<string, unknown> = {}) {
 // The runtime's ExecutionContext, as far as the entry uses it.
 const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
 
-async function identity(orgRole: string, orgId = ORG) {
+async function identity(orgRole: string, orgId = ORG, sub = `user_${orgRole}`) {
 	return mintIdentityJwt(privateKeyPem, {
-		subject: { sub: `user_${orgRole}`, email: `${orgRole}@acme.example`, orgId, orgRole },
+		subject: { sub, email: `${sub.replace(/^user_/, "")}@acme.example`, orgId, orgRole },
 		audience: AUDIENCE,
 		issuer: ISSUER,
 		channel: "web",
@@ -184,10 +185,18 @@ async function send(
 	env: object,
 	method: string,
 	path: string,
-	options: { as?: string; orgId?: string; token?: string | null; body?: unknown; headers?: Record<string, string> } = {},
+	options: {
+		as?: string;
+		/** The caller's user id; `user_<role>` by default. */
+		sub?: string;
+		orgId?: string;
+		token?: string | null;
+		body?: unknown;
+		headers?: Record<string, string>;
+	} = {},
 ): Promise<Sent> {
 	const headers = new Headers(options.headers);
-	const token = options.token === undefined ? await identity(options.as ?? "owner", options.orgId) : options.token;
+	const token = options.token === undefined ? await identity(options.as ?? "owner", options.orgId, options.sub) : options.token;
 	if (token) headers.set("x-everyapp-identity", token);
 	if (options.body !== undefined) headers.set("content-type", "application/json");
 	const response = await worker.fetch(
@@ -209,18 +218,22 @@ async function send(
 	return { status: response.status, body };
 }
 
-async function seedMailbox(bucket: ReturnType<typeof fakeBucket>, email: string) {
-	await bucket.put(`mailboxes/${email}.json`, JSON.stringify({ fromName: "Team" }));
+async function seedMailbox(bucket: ReturnType<typeof fakeBucket>, email: string, extra: Record<string, unknown> = {}) {
+	await bucket.put(`mailboxes/${email}.json`, JSON.stringify({ fromName: "Team", ...extra }));
+}
+
+function stored(bucket: ReturnType<typeof fakeBucket>, email: string) {
+	return JSON.parse(bucket.objects.get(`mailboxes/${email}.json`)!);
 }
 
 describe("the organization pin", () => {
 	it("refuses an identity from another organization on the organization's own copy", async () => {
 		const { env } = makeEnv();
 		const res = await send(env, "GET", "/api/v1/mailboxes", { orgId: "org_other" });
-		expect(res).toEqual({
-			status: 401,
-			body: { error: "unauthenticated", message: "this app belongs to another organization" },
-		});
+		// Since @every-app/sdk rc.9 everyApp() refuses it itself, before
+		// requireOrganization() (which stays as a second check).
+		expect(res).toMatchObject({ status: 401, body: { error: "unauthenticated" } });
+		expect((res.body as { message: string }).message).toMatch(/org_other/);
 	});
 
 	it("lets any organization's member in when the copy isn't pinned (the shared shape)", async () => {
@@ -248,8 +261,9 @@ describe("roles", () => {
 		expect(roleOf({ orgRole: "owner" })).toBe("owner");
 		expect(roleOf({ orgRole: "admin" })).toBe("admin");
 		expect(roleOf({ orgRole: "member" })).toBe("member");
-		expect(roleOf({ orgRole: "guest" })).toBe("member");
-		expect(roleOf({ orgRole: "" })).toBe("member");
+		// Roles the SDK's type doesn't name (a newer gateway's) are members too.
+		expect(roleOf({ orgRole: "guest" as never })).toBe("member");
+		expect(roleOf({ orgRole: "" as never })).toBe("member");
 	});
 
 	it("a member can't create a mailbox; an owner and an admin can", async () => {
@@ -268,7 +282,7 @@ describe("roles", () => {
 		});
 		expect(created.status).toBe(201);
 		expect(created.body).toMatchObject({ id: "team@example.com", email: "team@example.com", name: "Team" });
-		expect(bucket.objects.has("mailboxes/team@example.com.json")).toBe(true);
+		expect(stored(bucket, "team@example.com")).toMatchObject({ fromName: "Team", ownerId: "user_owner" });
 
 		const byAdmin = await send(env, "POST", "/api/v1/mailboxes", {
 			as: "admin",
@@ -298,15 +312,106 @@ describe("roles", () => {
 		expect(bucket.objects.has("mailboxes/team@example.com.json")).toBe(false);
 	});
 
-	it("a member uses the organization's mailboxes", async () => {
+	it("a member uses the organization's shared mailboxes (those created before ownership)", async () => {
 		const { env, bucket } = makeEnv();
 		await seedMailbox(bucket, "team@example.com");
 		const list = await send(env, "GET", "/api/v1/mailboxes", { as: "member" });
-		expect(list).toEqual({ status: 200, body: [{ id: "team@example.com", email: "team@example.com", name: "team@example.com" }] });
+		expect(list).toEqual({ status: 200, body: [{ id: "team@example.com", email: "team@example.com", name: "team@example.com", settings: {} }] });
 		const one = await send(env, "GET", "/api/v1/mailboxes/team@example.com", { as: "member" });
 		expect(one.status).toBe(200);
 		const folders = await send(env, "GET", "/api/v1/mailboxes/team@example.com/folders", { as: "member" });
 		expect(folders).toEqual({ status: 200, body: FOLDERS });
+	});
+});
+
+describe("a mailbox is its creator's", () => {
+	const OWNED = "alice@example.com";
+	const paths = [`/api/v1/mailboxes/${OWNED}`, `/api/v1/mailboxes/${OWNED}/folders`, `/api/v1/mailboxes/${OWNED}/emails?folder=inbox`];
+
+	it("a new mailbox belongs to its creator: a client can't name another owner or a provider", async () => {
+		const { env, bucket } = makeEnv();
+		const created = await send(env, "POST", "/api/v1/mailboxes", {
+			as: "admin",
+			body: { name: "Sales", email: "sales@example.com", settings: { ownerId: "user_other", provider: "gmail", signature: { enabled: true, text: "S" } } },
+		});
+		expect(created.status).toBe(201);
+		const settings = stored(bucket, "sales@example.com");
+		expect(settings).toMatchObject({ ownerId: "user_admin", signature: { enabled: true, text: "S" } });
+		expect(settings.provider).toBeUndefined();
+		expect(created.body).toMatchObject({ settings: { ownerId: "user_admin" } });
+	});
+
+	it("its owner sees and uses it, as a member; another member and an admin who isn't its owner get 404", async () => {
+		const { env, bucket } = makeEnv();
+		await seedMailbox(bucket, OWNED, { ownerId: "user_alice" });
+		await seedMailbox(bucket, "team@example.com");
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const mine = await send(env, "GET", "/api/v1/mailboxes", { as: "member", sub: "user_alice" });
+		expect((mine.body as { id: string }[]).map((m) => m.id).sort()).toEqual([OWNED, "team@example.com"]);
+		expect((await send(env, "GET", paths[0]!, { as: "member", sub: "user_alice" })).status).toBe(200);
+		expect(await send(env, "GET", paths[1]!, { as: "member", sub: "user_alice" })).toEqual({ status: 200, body: FOLDERS });
+
+		for (const [as, sub] of [
+			["member", "user_bob"],
+			["admin", "user_admin"],
+			["owner", "user_owner"],
+		] as const) {
+			const list = await send(env, "GET", "/api/v1/mailboxes", { as, sub });
+			expect((list.body as { id: string }[]).map((m) => m.id), as).toEqual(["team@example.com"]);
+			for (const path of paths) {
+				expect(await send(env, "GET", path, { as, sub }), `${as} ${path}`).toEqual({ status: 404, body: { error: "Not found" } });
+			}
+			for (const method of ["PUT", "DELETE"]) {
+				const res = await send(env, method, paths[0]!, { as, sub, body: method === "PUT" ? { settings: { fromName: "Mine now" } } : undefined });
+				expect(res, `${as} ${method}`).toEqual({ status: 404, body: { error: "Not found" } });
+			}
+		}
+		expect(stored(bucket, OWNED)).toEqual({ fromName: "Team", ownerId: "user_alice" });
+	});
+
+	it("its owner edits its settings and deletes it, even as a member; the owner and provider stay as they were", async () => {
+		const { env, bucket } = makeEnv();
+		await seedMailbox(bucket, OWNED, { ownerId: "user_alice", provider: "gmail" });
+
+		const edited = await send(env, "PUT", paths[0]!, {
+			as: "member",
+			sub: "user_alice",
+			body: { settings: { fromName: "Alice", agentSystemPrompt: "Be terse.", ownerId: "user_bob", provider: null } },
+		});
+		expect(edited.status).toBe(200);
+		expect(stored(bucket, OWNED)).toEqual({ fromName: "Alice", agentSystemPrompt: "Be terse.", ownerId: "user_alice", provider: "gmail" });
+
+		// Leaving them out doesn't drop them either.
+		expect((await send(env, "PUT", paths[0]!, { as: "member", sub: "user_alice", body: { settings: { fromName: "A" } } })).status).toBe(200);
+		expect(stored(bucket, OWNED)).toEqual({ fromName: "A", ownerId: "user_alice", provider: "gmail" });
+
+		// Settings that aren't an object would drop the owner: refused.
+		for (const body of [{ settings: null }, { settings: ["x"] }, {}]) {
+			const res = await send(env, "PUT", paths[0]!, { as: "member", sub: "user_alice", body });
+			expect(res.status).toBe(400);
+		}
+		expect(stored(bucket, OWNED)).toMatchObject({ ownerId: "user_alice" });
+
+		expect((await send(env, "DELETE", paths[0]!, { as: "member", sub: "user_alice" })).status).toBe(204);
+		expect(bucket.objects.has(`mailboxes/${OWNED}.json`)).toBe(false);
+	});
+
+	it("only its owner reaches its chat agent", async () => {
+		const { env, bucket, agentCalls } = makeEnv();
+		await seedMailbox(bucket, OWNED, { ownerId: "user_alice" });
+		const path = `/agents/email-agent/${OWNED}`;
+		const upgrade = { upgrade: "websocket" };
+		expect((await send(env, "GET", path, { as: "member", sub: "user_alice", headers: upgrade })).status).toBe(200);
+		expect((await send(env, "GET", `${path}/get-messages`, { as: "member", sub: "user_alice" })).status).toBe(200);
+		for (const [as, sub] of [
+			["member", "user_bob"],
+			["admin", "user_admin"],
+		] as const) {
+			expect(await send(env, "GET", path, { as, sub, headers: upgrade })).toEqual({ status: 404, body: "Agent not found" });
+			expect(await send(env, "GET", `${path}/get-messages`, { as, sub })).toEqual({ status: 404, body: "Agent not found" });
+		}
+		expect(agentCalls).toEqual([`${OWNED} ${path}`, `${OWNED} ${path}/get-messages`]);
 	});
 });
 

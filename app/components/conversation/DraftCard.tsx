@@ -1,4 +1,5 @@
 import { Pencil, Send, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { formatListDate, htmlToPlainText } from "~/lib/utils";
@@ -25,6 +26,7 @@ export function DraftCard({
 	onEdit,
 	onSend,
 	onDiscard,
+	extraActions,
 }: {
 	draft: Email;
 	selfAddress?: string;
@@ -32,6 +34,8 @@ export function DraftCard({
 	onEdit: () => void;
 	onSend: () => void;
 	onDiscard: () => void;
+	/** More buttons after Edit (Gmail's "Open in Gmail", docs/GMAIL.md). */
+	extraActions?: ReactNode;
 }) {
 	const text = draftText(draft.body);
 	const recipients = shortRecipients(draft.recipient, draft.cc, selfAddress);
@@ -62,6 +66,7 @@ export function DraftCard({
 					<Pencil />
 					Edit
 				</Button>
+				{extraActions}
 				<IconTooltip label="Discard draft">
 					<Button size="icon-sm" variant="ghost" onClick={onDiscard} disabled={isSending} aria-label="Discard draft" className="ml-auto">
 						<Trash2 />

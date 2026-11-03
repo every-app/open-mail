@@ -55,6 +55,8 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useDocumentTitle } from "~/hooks/useDocumentTitle";
 import { mailboxDisplayName } from "~/lib/utils";
+// Gmail (docs/GMAIL.md): the connect card and the rows' Gmail tag.
+import ConnectGmailCard, { GmailMailboxBadge } from "~/components/gmail/ConnectGmailCard";
 import { useFolders } from "~/queries/folders";
 import { queryKeys } from "~/queries/keys";
 import { useCreateMailbox, useDeleteMailbox, useMailboxes } from "~/queries/mailboxes";
@@ -215,6 +217,7 @@ export default function HomeRoute() {
 					/>
 
 					<SetupBanner noDomain={noDomain} sendingOff={sendingOff} isAdmin={isAdmin} />
+					<ConnectGmailCard />
 
 					{isLoading ? (
 						<MailboxListSkeleton />
@@ -226,6 +229,7 @@ export default function HomeRoute() {
 									id={account.id}
 									email={account.email}
 									name={account.name}
+									badge={<GmailMailboxBadge mailbox={account} />}
 									onDelete={
 										canManage
 											? () => setMailboxToDelete({ id: account.id, email: account.email })
@@ -433,11 +437,13 @@ function MailboxRow({
 	id,
 	email,
 	name,
+	badge,
 	onDelete,
 }: {
 	id: string;
 	email: string;
 	name: string;
+	badge?: React.ReactNode;
 	onDelete?: () => void;
 }) {
 	const { data: folders } = useFolders(id);
@@ -462,6 +468,7 @@ function MailboxRow({
 				</RouterLink>
 				{!sameAsAddress && <div className="truncate text-sm text-muted-foreground">{email}</div>}
 			</div>
+			{badge}
 			{unread > 0 && (
 				<Badge variant="soft" aria-label={`${unread} unread`}>
 					{unread}

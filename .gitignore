@@ -21,3 +21,6 @@ skills-lock.json
 .cloudflare/
 .everyapp/
 
+
+# Unreleased SDK and CLI builds this branch needs (vendor/README.md).
+!vendor/*.tgz

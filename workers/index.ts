@@ -21,6 +21,8 @@ import { Folders } from "../shared/folders";
 import type { Env } from "./types";
 import { requireMailbox, type MailboxContext } from "./lib/mailbox";
 import { discardAttachments, emailConfig, sendFailure } from "./everyapp/email";
+import { users } from "./everyapp/identity";
+import { listUsableMailboxes } from "./everyapp/mailbox-settings";
 import { labelRoutes } from "./everyapp/labels";
 
 type AppContext = Context<MailboxContext>;
@@ -100,7 +102,7 @@ app.get("/api/v1/config", async (c) => {
 // -- Mailboxes ------------------------------------------------------
 
 app.get("/api/v1/mailboxes", async (c) => {
-	const allMailboxes = await listMailboxes(c.env.BUCKET);
+	const allMailboxes = await listUsableMailboxes(c.env.BUCKET, users.get(c.req.raw)?.id); // Every App: the caller's and the shared ones
 	return c.json(allMailboxes.map((m) => ({ ...m, name: m.id })));
 });
 

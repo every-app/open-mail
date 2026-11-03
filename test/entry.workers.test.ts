@@ -3,7 +3,9 @@
 // vitest.config.ts). It proves the project's wiring as much as the entry:
 // everyApp() fails closed without the gateway's key or identity, and with a
 // minted identity the request reaches upstream's API, which writes the
-// mailbox's settings to R2 and runs MailboxDO's migrations.
+// mailbox's settings to R2 and runs MailboxDO's migrations. Then who sees a
+// mailbox (its creator, or everyone for a shared one) and who edits its
+// settings, end to end.
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { mintIdentityJwt } from "@every-app/sdk/internal";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -87,4 +89,64 @@ describe("the production entry in workerd", () => {
 		expect(await listed.json()).toContainEqual(expect.objectContaining({ id: address }));
 	});
 
+	async function as(sub: string, orgRole: string) {
+		const identity = await mintIdentityJwt(key.privateKeyPem, {
+			issuer: ISSUER,
+			audience: AUDIENCE,
+			subject: { sub, email: `${sub}@example.com`, orgId: "org-1", orgRole },
+		});
+		return (method: string, path: string, body?: unknown) =>
+			call(
+				new Request(`${ORIGIN}${path}`, {
+					method,
+					headers: { "x-everyapp-identity": identity, "content-type": "application/json" },
+					body: body === undefined ? undefined : JSON.stringify(body),
+				}),
+				keys,
+			);
+	}
+
+	it("a mailbox is its creator's: listed, opened and edited by them only; a shared one is everyone's", async () => {
+		const owner = await as("user-owner", "owner");
+		const admin = await as("user-admin", "admin");
+		const member = await as("user-member", "member");
+		const address = `own-${crypto.randomUUID().slice(0, 8)}@example.com`;
+		const shared = `shared-${crypto.randomUUID().slice(0, 8)}@example.com`;
+		await env.BUCKET.put(`mailboxes/${shared}.json`, JSON.stringify({ fromName: "Team" }));
+
+		expect((await owner("POST", "/api/v1/mailboxes", { name: "Mine", email: address, settings: { ownerId: "user-member" } })).status).toBe(201);
+		expect(await env.BUCKET.get(`mailboxes/${address}.json`).then((o) => o!.json())).toMatchObject({ ownerId: "user-owner" });
+
+		const ids = async (who: typeof owner) => ((await (await who("GET", "/api/v1/mailboxes")).json()) as { id: string }[]).map((m) => m.id);
+		expect(await ids(owner)).toEqual(expect.arrayContaining([address, shared]));
+		for (const who of [admin, member]) {
+			expect(await ids(who)).toContain(shared);
+			expect(await ids(who)).not.toContain(address);
+			for (const path of [`/api/v1/mailboxes/${address}`, `/api/v1/mailboxes/${address}/folders`, `/api/v1/mailboxes/${address}/emails?folder=inbox`]) {
+				expect((await who("GET", path)).status, path).toBe(404);
+			}
+			expect((await who("PUT", `/api/v1/mailboxes/${address}`, { settings: { fromName: "x" } })).status).toBe(404);
+			expect((await who("DELETE", `/api/v1/mailboxes/${address}`)).status).toBe(404);
+		}
+		expect((await owner("GET", `/api/v1/mailboxes/${address}/folders`)).status).toBe(200);
+		expect((await member("GET", `/api/v1/mailboxes/${shared}/folders`)).status).toBe(200);
+		expect((await member("PUT", `/api/v1/mailboxes/${shared}`, { settings: { fromName: "x" } })).status).toBe(403);
+
+		const edited = await owner("PUT", `/api/v1/mailboxes/${address}`, { settings: { fromName: "Renamed", ownerId: "user-member" } });
+		expect(edited.status).toBe(200);
+		expect(await env.BUCKET.get(`mailboxes/${address}.json`).then((o) => o!.json())).toEqual({ fromName: "Renamed", ownerId: "user-owner" });
+		expect((await owner("DELETE", `/api/v1/mailboxes/${address}`)).status).toBe(204);
+	});
+
+	it("a member edits their own mailbox's settings, and its owner stays theirs", async () => {
+		const member = await as("user-member", "member");
+		const address = `own-${crypto.randomUUID().slice(0, 8)}@example.com`;
+		await env.BUCKET.put(`mailboxes/${address}.json`, JSON.stringify({ fromName: "Me", ownerId: "user-member" }));
+		const edited = await member("PUT", `/api/v1/mailboxes/${address}`, { settings: { fromName: "Me too" } });
+		expect(edited.status).toBe(200);
+		expect(await env.BUCKET.get(`mailboxes/${address}.json`).then((o) => o!.json())).toEqual({
+			fromName: "Me too",
+			ownerId: "user-member",
+		});
+	});
 });

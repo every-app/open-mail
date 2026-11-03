@@ -13,10 +13,16 @@
  *
  * Thirteen tools are upstream's (the deleted `EmailMCP` server), over the
  * same lib/tools.ts functions the chat agent uses, which stay as upstream
- * wrote them. Three are the port's: list_labels, create_label and
- * label_conversation, over the labels in workers/everyapp/mailbox.ts. Each call runs with the caller's identity: withGateway(env,
- * request) attributes its model calls (the draft verifier) and its sends to
- * the person behind the MCP client.
+ * wrote them; three are the port's own labels (list_labels, create_label and
+ * label_conversation, over the labels in workers/everyapp/mailbox.ts, which
+ * on a Gmail mailbox are Gmail's labels too: withGateway()'s MAILBOX carries
+ * the changes to Gmail), and two are the port's for Gmail mailboxes
+ * (archive, sync; docs/GMAIL.md). Each call runs with the caller's identity:
+ * withGateway(env, request) attributes its model calls (the draft verifier)
+ * and its sends to the person behind the MCP client, and a call reaches only
+ * the mailboxes the caller may use (their own and the shared ones). The send
+ * tools never send from a Gmail mailbox: a person sends Gmail mail with
+ * OpenMail's own Send button.
  *
  * Schemas are zod's, from `zod/v4` (inside the zod 3.25 the app pins for
  * @cloudflare/kumo), handed to the SDK as `{ jsonSchema, validate }`: that
@@ -39,7 +45,6 @@ import {
 	toolGetEmail,
 	toolGetThread,
 	toolListEmails,
-	toolListMailboxes,
 	toolMarkEmailRead,
 	toolMoveEmail,
 	toolSearchEmails,
@@ -49,7 +54,15 @@ import {
 } from "../lib/tools";
 import type { Env } from "../types";
 import { withGateway } from "./gateway";
+import { gmailOps } from "./gmail-tools-port";
 import { requireOrganization } from "./identity";
+import {
+	type PortMailboxSettings,
+	asSettings,
+	canUseMailbox,
+	listUsableMailboxes,
+	readMailboxSettings,
+} from "./mailbox-settings";
 import { LABEL_COLORS, LABEL_NAME_MAX, type Label, labeledMailbox } from "./label-model";
 
 /** Guidance for the model across the tools (the gateway allows 2 KB; kept under 1 KB). */
@@ -57,8 +70,9 @@ export const INSTRUCTIONS =
 	"Mailbox ids are email addresses: call list_mailboxes first and pass one as mailboxId. " +
 	"Folders are inbox, sent, draft, archive and trash. " +
 	"draft_reply, create_draft and update_draft only save drafts, which a person reviews and sends from the inbox. " +
-	"send_reply and send_email send immediately, from the mailbox's own address: call them only after the person has confirmed the recipient and the text. " +
-	"Labels tag conversations (several each, names may nest with /); folders say where a message is. " +
+	"send_reply and send_email send immediately, from the mailbox's own address, except from a Gmail mailbox (they refuse: save a draft instead); call them only after the person has confirmed the recipient and the text. " +
+	"Labels tag conversations (several each, names may nest with /); folders say where a message is. On a Gmail mailbox they are its Gmail labels. " +
+	"sync_mailbox works on Gmail mailboxes. " +
 	"Bodies are HTML. Every call acts as the person who connected this client.";
 
 /**
@@ -185,14 +199,49 @@ export async function toolEnv({ user, env, request }: Pick<ToolContext, "user" |
 }
 
 /**
- * The mailbox a tool acts on, as the REST routes find it (`requireMailbox`):
- * one whose settings are in the bucket. On an organization's own copy every
- * mailbox is the organization's. Ids are stored lowercase.
+ * The mailbox a tool acts on, as the REST routes find it (`requireMailbox`,
+ * `requireMailboxAccess`): one whose settings are in the bucket and that the
+ * caller may use. Someone else's mailbox reads as a missing one. Ids are
+ * stored lowercase.
  */
-export async function requireToolMailbox(env: Pick<Env, "BUCKET">, id: string): Promise<string> {
+export async function findToolMailbox(
+	env: Pick<Env, "BUCKET">,
+	id: string,
+	user: Pick<ToolContext["user"], "id"> | null | undefined,
+): Promise<{ mailbox: string; settings: PortMailboxSettings }> {
 	const mailbox = id.trim().toLowerCase();
-	if (!mailbox || !(await env.BUCKET.head(`mailboxes/${mailbox}.json`))) {
+	const stored = mailbox ? await readMailboxSettings(env.BUCKET, mailbox) : null;
+	const settings = asSettings(stored);
+	if (stored === null || !user || !canUseMailbox(settings, user.id)) {
 		throw new ToolError(`Mailbox "${id}" not found. Call list_mailboxes for the mailboxes you can use.`);
+	}
+	return { mailbox, settings };
+}
+
+/** findToolMailbox(), for the tools that need only the id. */
+export async function requireToolMailbox(
+	env: Pick<Env, "BUCKET">,
+	id: string,
+	user: Pick<ToolContext["user"], "id"> | null | undefined,
+): Promise<string> {
+	return (await findToolMailbox(env, id, user)).mailbox;
+}
+
+export const GMAIL_SEND_REFUSED =
+	"AI clients can't send from a Gmail mailbox. Save a draft instead (draft_reply or create_draft): the person reviews it and sends it from OpenMail or Gmail.";
+
+/** The mailbox a send tool sends from: one the caller may use, never a Gmail one. */
+async function requireSendingMailbox(env: Pick<Env, "BUCKET">, id: string, user: ToolContext["user"]): Promise<string> {
+	const { mailbox, settings } = await findToolMailbox(env, id, user);
+	if (settings.provider === "gmail") throw new ToolError(GMAIL_SEND_REFUSED);
+	return mailbox;
+}
+
+/** The Gmail mailbox a Gmail-only tool acts on. */
+async function requireGmailMailbox(env: Pick<Env, "BUCKET">, id: string, user: ToolContext["user"], tool: string): Promise<string> {
+	const { mailbox, settings } = await findToolMailbox(env, id, user);
+	if (settings.provider !== "gmail") {
+		throw new ToolError(`${tool}: this tool works on Gmail mailboxes, and "${mailbox}" is an OpenMail mailbox.`);
 	}
 	return mailbox;
 }
@@ -207,10 +256,11 @@ export const tools = defineTools(
 	{
 		list_mailboxes: {
 			title: "List mailboxes",
-			description: "List the organization's mailboxes. A mailbox's id is its email address.",
+			description:
+				"List the mailboxes you can use: your own and the organization's shared ones. A mailbox's id is its email address.",
 			risk: "read",
 			input: plainSchema(z.object({})),
-			handler: async (_input, context) => toolListMailboxes(await toolEnv(context)),
+			handler: async (_input, context) => listUsableMailboxes((await toolEnv(context)).BUCKET, context.user.id),
 		},
 
 		list_emails: {
@@ -228,7 +278,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, folder, limit, page }, context) => {
 				const env = await toolEnv(context);
-				return toolListEmails(env, await requireToolMailbox(env, mailboxId), { folder, limit, page });
+				return toolListEmails(env, await requireToolMailbox(env, mailboxId, context.user), { folder, limit, page });
 			},
 		},
 
@@ -239,7 +289,7 @@ export const tools = defineTools(
 			input: plainSchema(z.object({ mailboxId, emailId: emailId.describe("The email ID to retrieve") })),
 			handler: async ({ mailboxId, emailId }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(await toolGetEmail(env, await requireToolMailbox(env, mailboxId), emailId));
+				return unwrap(await toolGetEmail(env, await requireToolMailbox(env, mailboxId, context.user), emailId));
 			},
 		},
 
@@ -252,7 +302,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, threadId }, context) => {
 				const env = await toolEnv(context);
-				return toolGetThread(env, await requireToolMailbox(env, mailboxId), threadId);
+				return toolGetThread(env, await requireToolMailbox(env, mailboxId, context.user), threadId);
 			},
 		},
 
@@ -269,7 +319,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, query, folder }, context) => {
 				const env = await toolEnv(context);
-				return toolSearchEmails(env, await requireToolMailbox(env, mailboxId), { query, folder });
+				return toolSearchEmails(env, await requireToolMailbox(env, mailboxId, context.user), { query, folder });
 			},
 		},
 
@@ -290,7 +340,7 @@ export const tools = defineTools(
 			handler: async ({ mailboxId, originalEmailId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
 				return unwrap(
-					await toolDraftReply(env, await requireToolMailbox(env, mailboxId), {
+					await toolDraftReply(env, await requireToolMailbox(env, mailboxId, context.user), {
 						originalEmailId,
 						to,
 						subject,
@@ -319,7 +369,7 @@ export const tools = defineTools(
 			handler: async ({ mailboxId, to, subject, bodyHtml, in_reply_to, thread_id }, context) => {
 				const env = await toolEnv(context);
 				const result = unwrap(
-					await toolDraftEmail(env, await requireToolMailbox(env, mailboxId), {
+					await toolDraftEmail(env, await requireToolMailbox(env, mailboxId, context.user), {
 						to: to || "",
 						subject,
 						body: bodyHtml,
@@ -355,7 +405,7 @@ export const tools = defineTools(
 			handler: async ({ mailboxId, draftId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
 				return unwrap(
-					await toolUpdateDraft(env, await requireToolMailbox(env, mailboxId), { draftId, to, subject, bodyHtml }),
+					await toolUpdateDraft(env, await requireToolMailbox(env, mailboxId, context.user), { draftId, to, subject, bodyHtml }),
 				);
 			},
 		},
@@ -368,14 +418,14 @@ export const tools = defineTools(
 			input: plainSchema(z.object({ mailboxId, emailId: emailId.describe("The email ID to delete") })),
 			handler: async ({ mailboxId, emailId }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(await toolDeleteEmail(env, await requireToolMailbox(env, mailboxId), emailId));
+				return unwrap(await toolDeleteEmail(env, await requireToolMailbox(env, mailboxId, context.user), emailId));
 			},
 		},
 
 		send_reply: {
 			title: "Send a reply",
 			description:
-				"Send a reply to an email immediately, from the mailbox's own address, quoting the original and threaded with it. Only call after drafting and getting the person's confirmation.",
+				"Send a reply to an email immediately, from the mailbox's own address, quoting the original and threaded with it. Refuses on a Gmail mailbox: draft_reply saves the reply for the person to send. Only call after drafting and getting the person's confirmation.",
 			risk: "write",
 			openWorld: true,
 			input: plainSchema(
@@ -390,7 +440,7 @@ export const tools = defineTools(
 			handler: async ({ mailboxId, originalEmailId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
 				return unwrap(
-					await toolSendReply(env, await requireToolMailbox(env, mailboxId), { originalEmailId, to, subject, bodyHtml }),
+					await toolSendReply(env, await requireSendingMailbox(env, mailboxId, context.user), { originalEmailId, to, subject, bodyHtml }),
 				);
 			},
 		},
@@ -398,7 +448,7 @@ export const tools = defineTools(
 		send_email: {
 			title: "Send an email",
 			description:
-				"Send a new email (not a reply) immediately, from the mailbox's own address. Only call after getting the person's confirmation.",
+				"Send a new email (not a reply) immediately, from the mailbox's own address. Refuses on a Gmail mailbox: create_draft saves the email for the person to send. Only call after getting the person's confirmation.",
 			risk: "write",
 			openWorld: true,
 			input: plainSchema(
@@ -411,7 +461,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(await toolSendEmail(env, await requireToolMailbox(env, mailboxId), { to, subject, bodyHtml }));
+				return unwrap(await toolSendEmail(env, await requireSendingMailbox(env, mailboxId, context.user), { to, subject, bodyHtml }));
 			},
 		},
 
@@ -425,7 +475,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, emailId, read }, context) => {
 				const env = await toolEnv(context);
-				return toolMarkEmailRead(env, await requireToolMailbox(env, mailboxId), emailId, read);
+				return toolMarkEmailRead(env, await requireToolMailbox(env, mailboxId, context.user), emailId, read);
 			},
 		},
 
@@ -437,25 +487,53 @@ export const tools = defineTools(
 			input: plainSchema(z.object({ mailboxId, emailId, folderId: z.string().min(1).describe(MOVE_FOLDER_TOOL_DESCRIPTION) })),
 			handler: async ({ mailboxId, emailId, folderId }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(await toolMoveEmail(env, await requireToolMailbox(env, mailboxId), emailId, folderId));
+				return unwrap(await toolMoveEmail(env, await requireToolMailbox(env, mailboxId, context.user), emailId, folderId));
+			},
+		},
+
+		archive_email: {
+			title: "Archive an email",
+			description: "Move an email out of the inbox into the archive. On a Gmail mailbox it leaves Gmail's inbox too.",
+			risk: "write",
+			idempotent: true,
+			input: plainSchema(z.object({ mailboxId, emailId })),
+			handler: async ({ mailboxId, emailId }, context) => {
+				const env = await toolEnv(context);
+				// A move, as move_email's: withGateway()'s MAILBOX carries it to Gmail.
+				unwrap(await toolMoveEmail(env, await requireToolMailbox(env, mailboxId, context.user), emailId, Folders.ARCHIVE));
+				return { status: "archived", emailId };
+			},
+		},
+
+		sync_mailbox: {
+			title: "Sync with Gmail",
+			description:
+				"Sync a Gmail mailbox now: send OpenMail's pending changes (drafts, labels, moves) to Gmail and pull new mail. This tool works on Gmail mailboxes.",
+			risk: "write",
+			input: plainSchema(z.object({ mailboxId })),
+			handler: async ({ mailboxId }, context) => {
+				const env = await toolEnv(context);
+				const mailbox = await requireGmailMailbox(env, mailboxId, context.user, "sync_mailbox");
+				return gmailOps.sync(env, mailbox, context.request);
 			},
 		},
 
 		list_labels: {
 			title: "List labels",
 			description:
-				"List a mailbox's labels (id, name, color) with how many labeled conversations have unread mail. Labels tag conversations; a name with / is nested (Work/Reports).",
+				"List a mailbox's labels (id, name, color) with how many labeled conversations have unread mail. Labels tag conversations; a name with / is nested (Work/Reports). On a Gmail mailbox these are its Gmail labels.",
 			risk: "read",
 			input: plainSchema(z.object({ mailboxId })),
 			handler: async ({ mailboxId }, context) => {
 				const env = await toolEnv(context);
-				return labeledMailbox(env, await requireToolMailbox(env, mailboxId)).listLabels();
+				return labeledMailbox(env, await requireToolMailbox(env, mailboxId, context.user)).listLabels();
 			},
 		},
 
 		create_label: {
 			title: "Create a label",
-			description: "Create a label in a mailbox. Names are unique regardless of case; use / to nest (Work/Reports).",
+			description:
+				"Create a label in a mailbox. Names are unique regardless of case; use / to nest (Work/Reports). On a Gmail mailbox it is created in Gmail too.",
 			risk: "write",
 			input: plainSchema(
 				z.object({
@@ -466,7 +544,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, name, color }, context) => {
 				const env = await toolEnv(context);
-				const result = await labeledMailbox(env, await requireToolMailbox(env, mailboxId)).createLabel(name, color);
+				const result = await labeledMailbox(env, await requireToolMailbox(env, mailboxId, context.user)).createLabel(name, color);
 				if (result.ok) return result.label;
 				throw new ToolError(
 					result.error === "duplicate" ? `A label named "${name}" already exists.` : `"${name}" is not a valid label name.`,
@@ -477,7 +555,7 @@ export const tools = defineTools(
 		label_conversation: {
 			title: "Label a conversation",
 			description:
-				"Add labels to and remove labels from a whole conversation (every message in it). Name labels by name or id; returns the conversation's labels.",
+				"Add labels to and remove labels from a whole conversation (every message in it). Name labels by name or id; returns the conversation's labels. On a Gmail mailbox the change is made in Gmail too.",
 			risk: "write",
 			idempotent: true,
 			input: plainSchema(
@@ -491,7 +569,7 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, threadId, add, remove, createMissing }, context) => {
 				const env = await toolEnv(context);
-				const stub = labeledMailbox(env, await requireToolMailbox(env, mailboxId));
+				const stub = labeledMailbox(env, await requireToolMailbox(env, mailboxId, context.user));
 				const notFound = `No conversation or email "${threadId}" in this mailbox.`;
 				// Before createMissing makes labels for a conversation that isn't there.
 				if (!(await stub.findConversation(threadId))) throw new ToolError(notFound);

@@ -9,7 +9,8 @@
  * `email()` handler stay as upstream wrote them.
  *
  * Lane ownership: L1 owns PROVIDERS, mapModel, gatewayAi and gatewayModel;
- * L2 owns gatewayEmail (./email.ts); withGateway() itself stays as it is.
+ * L2 owns gatewayEmail (./email.ts); the Gmail lane owns withGateway()'s
+ * MAILBOX and EMAIL wrappers (./gmail/).
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
@@ -18,7 +19,10 @@ import {
 	type GatewayCallFor,
 } from "@every-app/sdk/server";
 import type { Env } from "../types";
+import { callFor } from "./attribution";
 import { gatewayEmail } from "./email";
+import { gmailMailboxNamespace } from "./gmail/namespace";
+import { gmailAwareEmail } from "./gmail/send";
 
 /**
  * Any origin does: the SDK sends the request's path over the
@@ -208,7 +212,7 @@ export function gatewayAi(env: Cloudflare.Env, target?: GatewayCallFor): Ai {
 	const ai = {
 		async run(model: string, inputs: RunInputs): Promise<{ response: string }> {
 			try {
-				fetchViaGateway ??= createGatewayFetch({ env, for: target });
+				fetchViaGateway ??= createGatewayFetch({ env, for: callFor(target) });
 				const res = await fetchViaGateway(`${provider.base}/chat/completions`, {
 					method: "POST",
 					headers: { "content-type": "application/json" },
@@ -256,7 +260,7 @@ export function gatewayModel(env: Cloudflare.Env, target?: GatewayCallFor) {
 		baseURL: providerOf(env).base,
 		// The gateway holds the key; the SDK drops the Authorization header.
 		apiKey: "gateway-managed",
-		fetch: createGatewayFetch({ env, for: target }),
+		fetch: createGatewayFetch({ env, for: callFor(target) }),
 	});
 }
 
@@ -274,7 +278,18 @@ export function agentModelId(env: ProviderEnv): string {
  */
 export { gatewayEmail };
 
-/** The env upstream's code expects: AI and EMAIL present, both brokered by the gateway. */
+/**
+ * The env upstream's code expects: AI and EMAIL present, both brokered by
+ * the gateway, and MAILBOX aware of Gmail mailboxes (docs/GMAIL.md): a
+ * Gmail mailbox's changes are queued for Gmail as they are made
+ * (gmail/namespace.ts), and a person's sends go through Gmail
+ * (gmail/send.ts). Native mailboxes are untouched.
+ */
 export function withGateway(env: Cloudflare.Env, target?: GatewayCallFor): Env {
-	return { ...env, AI: gatewayAi(env, target), EMAIL: gatewayEmail(env, target) };
+	return {
+		...env,
+		AI: gatewayAi(env, target),
+		EMAIL: gmailAwareEmail(env, target, gatewayEmail(env, target)),
+		MAILBOX: gmailMailboxNamespace(env, target),
+	};
 }

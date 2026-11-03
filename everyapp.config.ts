@@ -8,10 +8,12 @@ export default {
   icon: "/everyapp-icon.svg",
   resources: {
     // SQLite Durable Objects, exported by workers/app.ts. MAILBOX holds one
-    // mailbox's folders and emails, EMAIL_AGENT its chat agent.
+    // mailbox's folders and emails, EMAIL_AGENT its chat agent, GMAIL_SYNC a
+    // Gmail mailbox's sync state (cursor, id maps, outbox, draft jobs).
     durableObjects: [
       { name: "MAILBOX", className: "MailboxDO" },
       { name: "EMAIL_AGENT", className: "EmailAgent" },
+      { name: "GMAIL_SYNC", className: "GmailSync" },
     ],
   },
   // Model calls go through the gateway's AI proxy (workers/everyapp/gateway.ts).
@@ -63,6 +65,20 @@ export default {
     email: {
       access: "write",
       why: "Sends mail from the organization's mailboxes on its own domain.",
+    },
+    // Each person's own Gmail, through the Gateway's held-token proxy
+    // (docs/GMAIL.md). A person connects once, in OpenMail, and Google's
+    // screen shows exactly these two scopes. gmail.modify covers reading,
+    // drafts, labels and trash; gmail.send is for Send in OpenMail. The
+    // Gateway adds the sign-in scopes for the account's name itself, and
+    // refuses a token that holds more than these.
+    //
+    // GmailSync's alarm uses the same connection while OpenMail is closed
+    // (for: { background: true, userId }): it syncs and writes the agent's
+    // reply drafts. It never sends: only a person's own Send does.
+    "google-workspace": {
+      scopes: ["gmail.modify", "gmail.send"],
+      why: "Mirrors your Gmail, writes reply drafts as mail arrives, and sends when you press Send.",
     },
   },
   // Declares the Worker's email() handler; addresses belong to the installation.

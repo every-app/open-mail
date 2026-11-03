@@ -297,6 +297,9 @@ const api = {
 
 export default api;
 
+/** The request helper, for the port's own API modules (app/services/gmail-api.ts). */
+export { request as apiRequest };
+
 /** The `/api/v1/me` query, shared by every component that needs the person. */
 export const meQuery = {
 	queryKey: ["me"] as const,

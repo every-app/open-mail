@@ -61,6 +61,9 @@ export const MCP_TOOLS = [
 	{ name: "list_labels", desc: "List labels", risk: "read" },
 	{ name: "create_label", desc: "Create a label", risk: "write" },
 	{ name: "label_conversation", desc: "Add or remove a conversation's labels", risk: "write" },
+	// Gmail (docs/GMAIL.md): the port's Gmail tools.
+	{ name: "archive_email", desc: "Archive an email", risk: "write" },
+	{ name: "sync_mailbox", desc: "Sync a Gmail mailbox now", risk: "write" },
 ] as const;
 
 /** A titled card with a value to paste and its copy button, and notes under it. */

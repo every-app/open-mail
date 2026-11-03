@@ -58,7 +58,7 @@ code=$(curl "${R[@]}" -o "$TMP/config.json" -w '%{http_code}' "$U/api/v1/config"
 [ "$code" = 200 ] && [ "$(json "$TMP/config.json" 'JSON.stringify(j.domains) + JSON.stringify(j.emailAddresses) + typeof j.ready')" = '["example.com"][]boolean' ] \
 	&& pass "GET /api/v1/config -> $(cat "$TMP/config.json")" || fail "GET /api/v1/config -> $code $(cat "$TMP/config.json")"
 
-echo "######## mailboxes: the owner creates $MAILBOX, a member may not"
+echo "######## mailboxes: the owner creates $MAILBOX, a member may not, nor see it"
 code=$(curl "${R[@]}" "${O[@]}" -X POST -H 'content-type: application/json' -d "{\"name\":\"Dev\",\"email\":\"$MAILBOX\"}" -o "$TMP/create.json" -w '%{http_code}' "$U/api/v1/mailboxes")
 case "$code" in 201|409) pass "owner POST /api/v1/mailboxes $MAILBOX -> $code" ;; *) fail "owner POST /api/v1/mailboxes -> $code $(cat "$TMP/create.json")" ;; esac
 curl "${R[@]}" "$U/api/v1/mailboxes" > "$TMP/list.json"
@@ -67,7 +67,8 @@ MEMBER="$(node "$HERE/mint-dev-identity.mjs" member)"
 body=$(curl -s --max-time 30 -H "x-everyapp-identity: $MEMBER" -X POST -H 'content-type: application/json' -d "{\"name\":\"M\",\"email\":\"member-$STAMP@example.com\"}" -w ' %{http_code}' "$D/api/v1/mailboxes")
 case "$body" in *'"code":"admin_required"'*' 403') pass "member (minted dev identity, app port) POST /api/v1/mailboxes -> $body" ;; *) fail "member POST /api/v1/mailboxes -> $body" ;; esac
 code=$(curl -s --max-time 30 -H "x-everyapp-identity: $MEMBER" -o /dev/null -w '%{http_code}' "$D/api/v1/mailboxes/$MAILBOX/folders")
-[ "$code" = 200 ] && pass "member GET .../$MAILBOX/folders -> 200" || fail "member GET folders -> $code"
+# The owner's mailbox is theirs alone (ownerId): a member gets 404, as if it weren't there.
+[ "$code" = 404 ] && pass "member GET .../$MAILBOX/folders -> 404 (the owner's mailbox)" || fail "member GET folders -> $code (expected 404: the mailbox is the owner's)"
 OTHER_ORG="$(node "$HERE/mint-dev-identity.mjs" owner other-org)"
 code=$(curl -s --max-time 30 -H "x-everyapp-identity: $OTHER_ORG" -o /dev/null -w '%{http_code}' "$D/api/v1/mailboxes")
 echo "     (another organization's owner, unpinned dev copy: GET /api/v1/mailboxes -> $code; a deployed copy is pinned to EVERY_APP_ORG_ID and answers 401)"
@@ -142,7 +143,7 @@ curl "${R[@]}" "${H[@]}" -o /dev/null -X POST -d '{"jsonrpc":"2.0","method":"not
 rpc tools/list 2 '{}'
 names=$(json "$TMP/rpc.json" 'j.result.tools.map((t) => t.name).sort().join(",")')
 count=$(json "$TMP/rpc.json" 'j.result.tools.length')
-[ "$count" = 15 ] && [ "${names#*delete_email}" = "$names" ] && pass "tools/list -> 15 tools, no delete_email: $names" || fail "tools/list -> $count: $names"
+[ "$count" = 20 ] && [ "${names#*delete_email}" = "$names" ] && pass "tools/list -> 20 tools, no delete_email: $names" || fail "tools/list -> $count: $names"
 rpc tools/call 3 '{"name":"list_mailboxes","arguments":{}}'
 listed=$(json "$TMP/rpc.json" 'j.result.content.map((c) => c.text).join("")')
 case "$listed" in *"$MAILBOX"*) pass "tools/call list_mailboxes -> includes $MAILBOX" ;; *) fail "tools/call list_mailboxes -> $(head -c 300 "$TMP/rpc.json")" ;; esac

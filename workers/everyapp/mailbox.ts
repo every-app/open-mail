@@ -295,6 +295,44 @@ export class MailboxDO extends UpstreamMailboxDO {
 		return { ok: true, threadKey: key, labels: (await this.labelsForThreads([key]))[key] ?? [] };
 	}
 
+	/**
+	 * Set one email's labels among `scope` (label ids) to `labelIds`, leaving
+	 * its other labels alone. The Gmail sync's (gmail/label-sync.ts): an
+	 * email's labels as Gmail has them, where `scope` is the labels linked to
+	 * Gmail ones. Not a route or a tool. Answers whether anything changed.
+	 */
+	async setEmailLabels(emailId: string, labelIds: string[], scope: string[]): Promise<boolean> {
+		const sql = this.ctx.storage.sql;
+		const inScope = new Set(scope);
+		const wanted = [...new Set(labelIds)].filter((id) => inScope.has(id));
+		const before = new Set(
+			[
+				...sql.exec(
+					`SELECT label_id FROM email_labels WHERE email_id = ?1 AND label_id IN (SELECT value FROM json_each(?2))`,
+					emailId,
+					JSON.stringify([...inScope]),
+				),
+			].map((r) => String(r.label_id)),
+		);
+		const add = wanted.filter((id) => !before.has(id));
+		const remove = [...before].filter((id) => !wanted.includes(id));
+		if (add.length === 0 && remove.length === 0) return false;
+		if ([...sql.exec(`SELECT 1 FROM emails WHERE id = ?1`, emailId)].length === 0) return false;
+		this.ctx.storage.transactionSync(() => {
+			if (remove.length > 0) {
+				sql.exec(
+					`DELETE FROM email_labels WHERE email_id = ?1 AND label_id IN (SELECT value FROM json_each(?2))`,
+					emailId,
+					JSON.stringify(remove),
+				);
+			}
+			for (const labelId of add) {
+				sql.exec(`INSERT OR IGNORE INTO email_labels (email_id, label_id) SELECT ?1, id FROM labels WHERE id = ?2`, emailId, labelId);
+			}
+		});
+		return true;
+	}
+
 	/** Each conversation's labels, by conversation key (thread id, or email id). Keys with none are absent. */
 	async labelsForThreads(threadKeys: string[]): Promise<Record<string, Label[]>> {
 		const keys = [...new Set(threadKeys.filter(Boolean))];

@@ -11,6 +11,8 @@ import { cn } from "~/lib/cn";
 import { getSnippetText } from "~/lib/utils";
 import type { Email } from "~/types";
 import { avatarInitial, isUnread, participantsLabel } from "./participants";
+// Gmail (docs/GMAIL.md): "Drafting reply… 0:42" on a conversation's row.
+import { DraftingRowStatus } from "~/components/gmail/DraftingStatus";
 
 /** Label chips shown before the subject; the rest fold into a "+N" chip. */
 const MAX_CHIPS_DESKTOP = 2;
@@ -205,6 +207,7 @@ export function MailRow({
 				{star}
 				<div className="ml-1 flex w-40 shrink-0 items-center gap-1.5 lg:w-52">{sender}</div>
 				<div className="flex min-w-0 flex-1 items-center gap-1.5 pl-2">
+					<DraftingRowStatus email={email} />
 					{chips(MAX_CHIPS_DESKTOP)}
 					{subjectLine}
 				</div>
@@ -254,6 +257,7 @@ export function MailRow({
 						</span>
 					</div>
 					<div className="mt-0.5 flex items-center gap-1.5">
+						<DraftingRowStatus email={email} />
 						{chips(MAX_CHIPS_MOBILE)}
 						{subjectLine}
 						<span className="ml-auto -my-1 -mr-1">{star}</span>

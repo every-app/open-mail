@@ -126,8 +126,8 @@ try {
 	check(config.name === WORKER, `worker name is the build placeholder ${WORKER}`, config.name);
 	check(
 		JSON.stringify(exportsSeen) === JSON.stringify([...durableObjects].sort()) &&
-			// Exactly these two: the MCP tools are a defineTools() catalog, not a Durable Object.
-			JSON.stringify(exportsSeen) === JSON.stringify(["EmailAgent", "MailboxDO"]),
+			// Exactly these three: the MCP tools are a defineTools() catalog, not a Durable Object.
+			JSON.stringify(exportsSeen) === JSON.stringify(["EmailAgent", "GmailSync", "MailboxDO"]),
 		`exports are the manifest's Durable Objects (${durableObjects.join(", ")})`,
 		exportsSeen,
 	);

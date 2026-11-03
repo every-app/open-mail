@@ -29,6 +29,9 @@ export default defineConfig({
     projects: [
       {
         plugins: [tsconfigPaths()],
+        // Node tests that load the entry (workers/app.ts) import the Durable
+        // Object classes; workerd's base class is a stub here.
+        resolve: { alias: { "cloudflare:workers": new URL("./test/stubs/cloudflare-workers.ts", import.meta.url).pathname } },
         test: {
           name: "node",
           environment: "node",

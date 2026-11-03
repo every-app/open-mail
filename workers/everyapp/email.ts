@@ -26,6 +26,7 @@ import {
 	type SendEmailMessage,
 	type SendEmailResult,
 } from "@every-app/sdk/server";
+import { APP_BACKGROUND_WORK, callFor } from "./attribution";
 
 /** A failed send: the gateway's refusal code and message, or `email_send_failed`. */
 export class EmailSendError extends Error {
@@ -54,7 +55,7 @@ type Recipients = Address | Address[];
  * CLOUDFLARE_ACCOUNT_ID and EMAIL_FROM in `.dev.vars`.
  */
 export function gatewayEmail(env: Cloudflare.Env, target?: GatewayCallFor): SendEmail {
-	return emailAdapter((message) => sendEmail({ env, for: target, message }));
+	return emailAdapter((message) => sendEmail({ env, for: callFor(target), message }));
 }
 
 /**
@@ -197,7 +198,7 @@ let readyCache: { config: EmailConfig; at: number } | undefined;
 export async function emailConfig(env: Cloudflare.Env, now = Date.now()): Promise<EmailConfig> {
 	if (readyCache && now - readyCache.at < READY_TTL_MS) return readyCache.config;
 	try {
-		const status = await integrationStatus({ env, provider: "email" });
+		const status = await integrationStatus({ env, provider: "email", for: APP_BACKGROUND_WORK });
 		const config = {
 			domains: [...new Set(status.senders.map((sender) => sender.slice(sender.lastIndexOf("@") + 1)))],
 			ready: status.ready === true && status.senders.length > 0,

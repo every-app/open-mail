@@ -7,9 +7,19 @@ import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
 import { createRequestHandler } from "react-router";
 import { withGateway } from "./everyapp/gateway";
-import { agentGuard, me, requireAdmin, requireOrganization, users } from "./everyapp/identity";
+import {
+	agentGuard,
+	me,
+	requireAdmin,
+	requireMailboxAccess,
+	requireMailboxManager,
+	requireOrganization,
+	users,
+} from "./everyapp/identity";
 import { app as apiApp, receiveEmail } from "./index";
 import { withNamedAgents } from "./everyapp/inbound";
+import { guardMailboxSettings, stampMailboxOwner } from "./everyapp/settings-routes";
+import { gmailRoutes } from "./everyapp/gmail/routes";
 import { tools } from "./everyapp/tools";
 import type { Env } from "./types";
 
@@ -25,6 +35,7 @@ import { MailboxDO as LabeledMailboxDO } from "./everyapp/mailbox";
 // The port's code reaches the label methods through mailboxStub() there.
 export const MailboxDO = LabeledMailboxDO as typeof UpstreamMailboxDO;
 export { EmailAgent } from "./agent";
+export { GmailSync } from "./everyapp/gmail/sync";
 
 declare module "react-router" {
 	export interface AppLoadContext {
@@ -44,27 +55,37 @@ const requestHandler = createRequestHandler(
 const app = new Hono<{ Bindings: Env }>();
 
 // Every App: who may do what (workers/everyapp/identity.ts). The
-// organization is the boundary, checked at the entry for every request;
-// owners and admins also create and delete mailboxes and edit their
-// settings (the agent's system prompt among them). Registered before the
-// API so the role check runs ahead of upstream's handlers.
+// organization is the boundary, checked at the entry for every request.
+// Inside it a mailbox is its creator's alone (someone else's answers 404,
+// here and under it); a shared, ownerless one is every member's, and only
+// owners and admins edit or delete it. Owners and admins create native
+// mailboxes, stamped with their owner. Registered before the API (and any
+// other mailbox route) so the checks run ahead of every handler.
 app.get("/api/v1/me", (c) => {
 	const user = users.get(c.req.raw);
 	if (!user) return c.json({ error: "unauthenticated" }, 401);
 	return c.json(me(user, c.env));
 });
-app.post("/api/v1/mailboxes", requireAdmin);
-app.on(["PUT", "DELETE"], "/api/v1/mailboxes/:mailboxId", requireAdmin);
+app.post("/api/v1/mailboxes", requireAdmin, stampMailboxOwner);
+// Hono's `/*` matches the mailbox's own path too.
+app.use("/api/v1/mailboxes/:mailboxId/*", requireMailboxAccess);
+app.on(["PUT", "DELETE"], "/api/v1/mailboxes/:mailboxId", requireMailboxManager);
+app.put("/api/v1/mailboxes/:mailboxId", guardMailboxSettings);
+
+// Gmail mailboxes (docs/GMAIL.md): status, connect, sync, drafting, labels.
+app.route("/", gmailRoutes);
 
 // Mount the API routes
 app.route("/", apiApp);
 
 // Agent WebSocket routing - must be before React Router catch-all.
 // partyserver makes every Durable Object binding addressable by URL; the
-// guard lets only the chat agent of an existing mailbox through.
+// guard lets only the chat agent of an existing mailbox the caller may use
+// through.
 app.all("/agents/*", async (c) => {
+	const user = users.get(c.req.raw);
 	const guard = (request: Request, lobby: { className: string; name: string }) =>
-		agentGuard(request, lobby, c.env);
+		agentGuard(request, lobby, c.env, user);
 	const response = await routeAgentRequest(c.req.raw, c.env, {
 		onBeforeConnect: guard,
 		onBeforeRequest: guard,

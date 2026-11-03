@@ -4,17 +4,26 @@
 // (`chan: "mcp"`), everyApp() verifies it and runs the tool. A fake
 // EVERY_APP_GATEWAY binding stands in for the gateway's AI proxy and email
 // capability and records what reaches it, so the tests can see that a tool's
-// model calls and sends carry the caller's identity.
+// model calls and sends carry the caller's identity. Also: a call reaches
+// only the caller's own and the shared mailboxes, the send tools need full
+// send, sync_mailbox goes to the Gmail side (gmail-tools-port.ts), stood in
+// for here, and the label tools reach the wrapped env.MAILBOX, which queues
+// a Gmail mailbox's label changes for Gmail.
 import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, mintIdentityJwt, mintSystemJwt } from "@every-app/sdk/internal";
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env, runInDurableObject, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Folders } from "../shared/folders";
 import worker from "../workers/app";
+import { gmailOps } from "../workers/everyapp/gmail-tools-port";
+import type { GmailSync } from "../workers/everyapp/gmail/sync";
+import { GMAIL_SEND_REFUSED } from "../workers/everyapp/tools";
 
 const ISSUER = env.EVERYAPP_IDENTITY_ISSUER as string;
 const AUDIENCE = env.EVERYAPP_AUDIENCE as string;
 const ORIGIN = "https://openmail.gateway.example.com";
 const ORG = "org-1";
+/** The MCP caller's user id. */
+const CALLER = "user-mcp";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -89,13 +98,13 @@ interface ToolAnswer {
 async function callTool(
 	name: string,
 	args: Record<string, unknown>,
-	options: { orgId?: string; scopes?: string[]; env?: Record<string, unknown> } = {},
+	options: { sub?: string; orgId?: string; scopes?: string[]; env?: Record<string, unknown> } = {},
 ): Promise<ToolAnswer> {
 	const callId = crypto.randomUUID();
 	const identity = await mintIdentityJwt(privateKeyPem, {
 		issuer: ISSUER,
 		audience: AUDIENCE,
-		subject: { sub: "user-mcp", email: "member@example.com", orgId: options.orgId ?? ORG, orgRole: "member" },
+		subject: { sub: options.sub ?? CALLER, email: "member@example.com", orgId: options.orgId ?? ORG, orgRole: "member" },
 		channel: "mcp",
 		scopes: options.scopes ?? [MCP_READ_SCOPE, MCP_WRITE_SCOPE],
 		toolCall: { id: callId, name },
@@ -122,12 +131,21 @@ function mailbox(address: string) {
 	return env.MAILBOX.get(env.MAILBOX.idFromName(address));
 }
 
-/** A mailbox as the REST route creates it; storage is shared, so a fresh address each test. */
-async function newMailbox(): Promise<string> {
+/**
+ * A mailbox as the REST route created it before ownership (shared), or with
+ * `settings` added (an owner, the Gmail provider); storage is
+ * shared, so a fresh address each test.
+ */
+async function newMailbox(settings: Record<string, unknown> = {}): Promise<string> {
 	const address = `mcp-${crypto.randomUUID().slice(0, 8)}@example.com`;
-	await env.BUCKET.put(`mailboxes/${address}.json`, JSON.stringify({ fromName: "Team" }));
+	await env.BUCKET.put(`mailboxes/${address}.json`, JSON.stringify({ fromName: "Team", ...settings }));
 	await mailbox(address).getFolders();
 	return address;
+}
+
+/** The caller's own native mailbox, which the send tools send from. */
+async function sendingMailbox(): Promise<string> {
+	return newMailbox({ ownerId: CALLER });
 }
 
 async function inboundEmail(address: string): Promise<string> {
@@ -152,7 +170,7 @@ async function inboundEmail(address: string): Promise<string> {
 const BODY = "<p>Thanks for your order. It ships on Tuesday by courier.</p>";
 
 describe("the catalog through the production entry", () => {
-	it("everyApp() in workers/app.ts answers the gateway's tools/list with the sixteen tools", async () => {
+	it("everyApp() in workers/app.ts answers the gateway's tools/list with the eighteen tools", async () => {
 		const token = await mintSystemJwt(privateKeyPem, { audience: AUDIENCE, issuer: ISSUER, purpose: "tools.list" });
 		const ctx = createExecutionContext();
 		const response = await worker.fetch(
@@ -167,17 +185,48 @@ describe("the catalog through the production entry", () => {
 		await waitOnExecutionContext(ctx);
 		expect(response.status).toBe(200);
 		const catalog = (await response.json()) as { tools: { name: string }[] };
-		expect(catalog.tools).toHaveLength(16);
+		expect(catalog.tools).toHaveLength(18);
 	});
 });
 
 describe("tool calls", () => {
-	it("list_mailboxes lists the organization's mailboxes", async () => {
-		const address = await newMailbox();
+	it("list_mailboxes lists the caller's own mailboxes and the shared ones, not anyone else's", async () => {
+		const shared = await newMailbox();
+		const mine = await newMailbox({ ownerId: CALLER });
+		const theirs = await newMailbox({ ownerId: "user-other" });
 		const answer = await callTool("list_mailboxes", {});
 		expect(answer.status).toBe(200);
 		expect(answer.body.result?.isError).toBeUndefined();
-		expect(JSON.parse(textOf(answer))).toContainEqual({ id: address, email: address });
+		const listed = JSON.parse(textOf(answer)) as { id: string; email: string }[];
+		expect(listed).toContainEqual(expect.objectContaining({ id: shared, email: shared }));
+		expect(listed).toContainEqual({ id: mine, email: mine, settings: { ownerId: CALLER } });
+		expect(listed.map((m) => m.id)).not.toContain(theirs);
+
+		const other = JSON.parse(textOf(await callTool("list_mailboxes", {}, { sub: "user-other" }))) as { id: string }[];
+		expect(other.map((m) => m.id)).toContain(theirs);
+		expect(other.map((m) => m.id)).not.toContain(mine);
+	});
+
+	it("someone else's mailbox reads as a missing one, for every tool", async () => {
+		const theirs = await newMailbox({ ownerId: "user-other" });
+		const id = await inboundEmail(theirs);
+		const notFound = {
+			content: [{ type: "text", text: `Mailbox "${theirs}" not found. Call list_mailboxes for the mailboxes you can use.` }],
+			isError: true,
+		};
+		const gateway = fakeGateway();
+		for (const [name, args] of [
+			["list_emails", { mailboxId: theirs }],
+			["get_email", { mailboxId: theirs, emailId: id }],
+			["archive_email", { mailboxId: theirs, emailId: id }],
+			["send_email", { mailboxId: theirs, to: "alice@example.org", subject: "Hi", bodyHtml: BODY }],
+		] as const) {
+			const answer = await callTool(name, args, { env: { EVERY_APP_GATEWAY: gateway.binding } });
+			expect(answer.body.result, name).toEqual(notFound);
+		}
+		expect(gateway.calls).toEqual([]);
+		expect(((await mailbox(theirs).getEmails({ folder: Folders.INBOX })) as unknown[]).length).toBe(1);
+		expect((await callTool("get_email", { mailboxId: theirs, emailId: id }, { sub: "user-other" })).body.result?.isError).toBeUndefined();
 	});
 
 	it("list_emails, move_email and mark_email_read work on the mailbox's Durable Object", async () => {
@@ -197,7 +246,7 @@ describe("tool calls", () => {
 	});
 
 	it("send_email: the verifier's model call and the send go through the gateway as the MCP caller", async () => {
-		const address = await newMailbox();
+		const address = await sendingMailbox();
 		const gateway = fakeGateway();
 		const answer = await callTool(
 			"send_email",
@@ -225,7 +274,7 @@ describe("tool calls", () => {
 	});
 
 	it("send_reply threads the reply and sends it as the caller", async () => {
-		const address = await newMailbox();
+		const address = await sendingMailbox();
 		const original = await inboundEmail(address);
 		const gateway = fakeGateway();
 		const answer = await callTool(
@@ -241,7 +290,7 @@ describe("tool calls", () => {
 
 	it("a refused send is a tool error with the gateway's reason, and nothing is copied to Sent", async () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
-		const address = await newMailbox();
+		const address = await sendingMailbox();
 		const gateway = fakeGateway({
 			refuse: { code: "email_sender_not_allowed", message: `This app may not send as ${address}.` },
 		});
@@ -255,6 +304,26 @@ describe("tool calls", () => {
 			content: [{ type: "text", text: `Failed to send email: This app may not send as ${address}.` }],
 			isError: true,
 		});
+		expect(await mailbox(address).getEmails({ folder: Folders.SENT })).toEqual([]);
+	});
+
+	it("the send tools refuse on a Gmail mailbox, even the caller's own, and send nothing", async () => {
+		const refused = { content: [{ type: "text", text: GMAIL_SEND_REFUSED }], isError: true };
+		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
+		const gateway = fakeGateway();
+		const sent = await callTool(
+			"send_email",
+			{ mailboxId: address, to: "alice@example.org", subject: "Your order", bodyHtml: BODY },
+			{ env: { EVERY_APP_GATEWAY: gateway.binding } },
+		);
+		expect(sent.body.result).toEqual(refused);
+		const replied = await callTool(
+			"send_reply",
+			{ mailboxId: address, originalEmailId: await inboundEmail(address), to: "alice@example.org", subject: "Re: Hi", bodyHtml: BODY },
+			{ env: { EVERY_APP_GATEWAY: gateway.binding } },
+		);
+		expect(replied.body.result).toEqual(refused);
+		expect(gateway.calls).toEqual([]);
 		expect(await mailbox(address).getEmails({ folder: Folders.SENT })).toEqual([]);
 	});
 
@@ -292,10 +361,10 @@ describe("tool calls", () => {
 		await newMailbox();
 		const pinned = { EVERY_APP_ORG_ID: ORG };
 		const refused = await callTool("list_mailboxes", {}, { orgId: "org-2", env: pinned });
-		expect(refused.body.result).toEqual({
-			content: [{ type: "text", text: "Not allowed: this app belongs to another organization." }],
-			isError: true,
-		});
+		// Since @every-app/sdk rc.9, everyApp() refuses it before the tool runs
+		// (toolEnv()'s own refusal stays as a second check).
+		expect(refused.status).toBe(401);
+		expect((refused.body as unknown as { error: { code: string } }).error.code).toBe("unauthenticated");
 		expect((await callTool("list_mailboxes", {}, { env: pinned })).body.result?.isError).toBeUndefined();
 	});
 
@@ -314,6 +383,60 @@ describe("tool calls", () => {
 		expect(remove.status).toBe(403);
 		expect(remove.body.error).toMatchObject({ code: "forbidden", message: "Calling delete_email needs the mcp:destructive scope." });
 		expect(((await mailbox(address).getEmails({ folder: Folders.INBOX })) as unknown[]).length).toBe(1);
+	});
+
+	it("archive_email moves an email to the archive, on an OpenMail mailbox too", async () => {
+		const address = await newMailbox({ ownerId: CALLER });
+		const id = await inboundEmail(address);
+		const answer = await callTool("archive_email", { mailboxId: address, emailId: id });
+		expect(JSON.parse(textOf(answer))).toEqual({ status: "archived", emailId: id });
+		expect(await mailbox(address).getEmails({ folder: Folders.INBOX })).toEqual([]);
+		expect(((await mailbox(address).getEmails({ folder: Folders.ARCHIVE })) as { id: string }[]).map((e) => e.id)).toEqual([id]);
+	});
+
+	it("sync_mailbox refuses an OpenMail mailbox, naming why", async () => {
+		const address = await newMailbox({ ownerId: CALLER });
+		const sync = vi.spyOn(gmailOps, "sync");
+		const answer = await callTool("sync_mailbox", { mailboxId: address });
+		expect(answer.body.result).toEqual({
+			content: [{ type: "text", text: `sync_mailbox: this tool works on Gmail mailboxes, and "${address}" is an OpenMail mailbox.` }],
+			isError: true,
+		});
+		expect(sync).not.toHaveBeenCalled();
+	});
+
+	it("sync_mailbox goes to the Gmail side for the caller's Gmail mailbox, with the call's request", async () => {
+		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
+		const sync = vi.spyOn(gmailOps, "sync").mockResolvedValue({ pulled: 2, pushed: 1 });
+		expect(JSON.parse(textOf(await callTool("sync_mailbox", { mailboxId: address.toUpperCase() })))).toEqual({ pulled: 2, pushed: 1 });
+		expect(sync.mock.calls[0]![1]).toBe(address);
+		expect(sync.mock.calls[0]![2]).toBeInstanceOf(Request);
+
+		// Someone else's Gmail mailbox never reaches the Gmail side.
+		const theirs = await newMailbox({ ownerId: "user-other", provider: "gmail" });
+		expect((await callTool("sync_mailbox", { mailboxId: theirs })).body.result?.isError).toBe(true);
+		expect(sync).toHaveBeenCalledTimes(1);
+	});
+
+	it("sync_mailbox reaches the mailbox's GmailSync, and says so when Gmail can't be reached", async () => {
+		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
+		const answer = await callTool("sync_mailbox", { mailboxId: address });
+		expect(answer.body.result?.isError).toBe(true);
+		expect(textOf(answer)).toMatch(/^Gmail refused/);
+	});
+
+	it("the label tools on a Gmail mailbox queue the changes for Gmail, through the wrapped env.MAILBOX", async () => {
+		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
+		const id = await inboundEmail(address);
+		const created = JSON.parse(textOf(await callTool("create_label", { mailboxId: address, name: "Customers" })));
+		await callTool("label_conversation", { mailboxId: address, threadId: id, add: ["Customers", "VIP"], createMissing: true });
+		const gmailSync = env.GMAIL_SYNC.get(env.GMAIL_SYNC.idFromName(address));
+		await runInDurableObject(gmailSync, (instance: GmailSync) => {
+			const ops = instance.store.pending().map((p) => p.op);
+			expect(ops.map((op) => op.kind)).toEqual(["label_create", "label_create", "label_thread"]);
+			expect(ops[0]).toMatchObject({ localId: created.id, name: "Customers" });
+			expect(ops[2]).toMatchObject({ kind: "label_thread", add: [created.id, ops[1]!.localId], remove: [] });
+		});
 	});
 
 	it("arguments are checked against the tool's schema before it runs", async () => {
