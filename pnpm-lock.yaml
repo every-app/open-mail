@@ -45,8 +45,8 @@ importers:
         specifier: ^0.1.8
         version: 0.1.8(@ai-sdk/react@3.0.118(react@19.2.4)(zod@3.25.76))(agents@0.7.6)(ai@6.0.116(zod@3.25.76))(react@19.2.4)(zod@3.25.76)
       '@every-app/sdk':
-        specifier: file:vendor/every-app-sdk-0.3.0-aaddc038.tgz
-        version: file:vendor/every-app-sdk-0.3.0-aaddc038.tgz
+        specifier: 0.3.0-rc.11
+        version: 0.3.0-rc.11
       '@tanstack/react-query':
         specifier: ^5.99.0
         version: 5.99.0(react@19.2.4)
@@ -169,8 +169,8 @@ importers:
         specifier: 1.0.0-beta.14
         version: 1.0.0-beta.14(@types/node@20.19.37)
       everyapp:
-        specifier: file:vendor/everyapp-0.3.0-aaddc038.tgz
-        version: file:vendor/everyapp-0.3.0-aaddc038.tgz(@types/node@20.19.37)
+        specifier: 0.3.0-rc.11
+        version: 0.3.0-rc.11(@types/node@20.19.37)
       shadcn:
         specifier: ^4.23.0
         version: 4.23.0
@@ -890,9 +890,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@every-app/sdk@file:vendor/every-app-sdk-0.3.0-aaddc038.tgz':
-    resolution: {integrity: sha512-u6TTyjscyvMDmNnYEtvPh+bkxIASi8qGQuPM61BQZJNWuXWp9S3yk/rv0NQxd3wwyNg4aedUjzKenk2NOGTuUw==, tarball: file:vendor/every-app-sdk-0.3.0-aaddc038.tgz}
-    version: 0.3.0
+  '@every-app/sdk@0.3.0-rc.11':
+    resolution: {integrity: sha512-wXHBI8EsdFluQtRuzZ66y9IggpPdCBQPXLOwdjPITmaqjFVkWxNF0ZwtY0EOq5drMLZgYEXqt/E89mpYiQGNtQ==}
     peerDependencies:
       '@tanstack/react-start': ^1.168.61
     peerDependenciesMeta:
@@ -2622,9 +2621,8 @@ packages:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
-  everyapp@file:vendor/everyapp-0.3.0-aaddc038.tgz:
-    resolution: {integrity: sha512-A5YdABG2FqyLKaAavjqqAHxHW48JiEaCzCNJhzv4rHmhE/CA4n9Is18MI9NiS2Rjpu5XYqzwlLBmmE9bKygfuA==, tarball: file:vendor/everyapp-0.3.0-aaddc038.tgz}
-    version: 0.3.0
+  everyapp@0.3.0-rc.11:
+    resolution: {integrity: sha512-Ef91SlSM/gjcDcFcZmgA4QjVcLoiTAK2uMmhQu3L00AUdfqg/vvvbdk9sR+FBHWzTzn0NtcytvR5B83Lq+HHaA==}
     engines: {node: '>=22.18.0'}
     hasBin: true
 
@@ -4906,7 +4904,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@every-app/sdk@file:vendor/every-app-sdk-0.3.0-aaddc038.tgz':
+  '@every-app/sdk@0.3.0-rc.11':
     dependencies:
       jose: 6.2.13
 
@@ -6378,7 +6376,7 @@ snapshots:
     dependencies:
       eventsource-parser: 3.0.6
 
-  everyapp@file:vendor/everyapp-0.3.0-aaddc038.tgz(@types/node@20.19.37):
+  everyapp@0.3.0-rc.11(@types/node@20.19.37):
     dependencies:
       '@cloudflare/config': 0.24.1
       '@inquirer/prompts': 8.7.5(@types/node@20.19.37)

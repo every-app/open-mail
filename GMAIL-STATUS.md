@@ -42,7 +42,7 @@ The spec is [docs/GMAIL.md](docs/GMAIL.md); the decisions are in [TODO.md](TODO.
 
 ## Verified
 
-See PR #19's body: what typechecks and which tests pass against the vendored (old) SDK.
+Typecheck, `check:deploy` and the 63 Gmail tests pass on `@every-app/sdk` and `everyapp` 0.3.0-rc.11.
 
 ## Not verified
 
@@ -52,5 +52,4 @@ See PR #19's body: what typechecks and which tests pass against the vendored (ol
 
 ## Needs a release
 
-- `vendor/` holds the old SDK (private-every-app `birds/feature` at 38c3ebcf). Re-vendor from a checkout with the OAuth simplification and `pack-for-app --vendor`, or pin the first release that has it. See vendor/README.md.
 - Existing Google connections are dropped by the Gateway change: each person reconnects once in OpenMail.

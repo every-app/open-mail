@@ -111,7 +111,7 @@ Under `everyapp dev` Gmail goes straight to Google with the developer's own toke
 
 ## Risks to check
 
-- **The new OAuth model needs a release.** The manifest, `connectUrl` and `integrationFetch` follow private-every-app's simplified model (`docs/design/2026-11-oauth-simplify.md`). The SDK vendored in `vendor/` predates it; see GMAIL-STATUS.md, "Needs a release".
+- **The new OAuth model needs Every App 0.3.0-rc.11 or later** (`docs/design/2026-11-oauth-simplify.md` in private-every-app), on the Gateway and in `package.json`.
 - **Existing connections are dropped** when the Gateway moves to the new model, so each person reconnects once in OpenMail.
 - **Quota.** Gmail allows 250 quota units per user per second. The first pull runs a page of 50 messages per sync (6 at a time), until 200 threads or the end of the last 30 days.
 - **One folder per email.** Upstream gives each email one folder; Gmail's system labels map to it, and the person's own labels are OpenMail labels.
