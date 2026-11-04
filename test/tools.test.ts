@@ -127,11 +127,11 @@ describe("the catalog the gateway snapshots", () => {
 		}
 	});
 
-	it("reads are read, drafts, moves and sends are write, delete_email is destructive", async () => {
+	it("reads are read, drafts, moves and sends are write, delete_email is a destructive write", async () => {
 		const risks = Object.fromEntries((await listCatalog()).tools.map((t) => [t.name, t.risk]));
 		for (const name of READ) expect(risks[name], name).toBe("read");
 		for (const name of WRITE) expect(risks[name], name).toBe("write");
-		expect(risks.delete_email).toBe("destructive");
+		expect(risks.delete_email).toBe("write");
 	});
 
 	it("the send tools reach outside the app; marking, moving, archiving and labelling can be repeated", async () => {
@@ -176,8 +176,8 @@ describe("the catalog the gateway snapshots", () => {
 	});
 
 	it("the MCP panel lists every tool an AI client can see, in step with the catalog", async () => {
-		const visible = (await listCatalog()).tools.filter((t) => t.risk !== "destructive").map((t) => t.name);
-		expect(visible).toHaveLength(17);
+		const visible = (await listCatalog()).tools.map((t) => t.name);
+		expect(visible).toHaveLength(18);
 		const panel = visible.filter((name) => !NOT_IN_PANEL_YET.includes(name));
 		expect(MCP_TOOLS.map((t) => t.name).sort()).toEqual(panel.sort());
 	});

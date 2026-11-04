@@ -6,7 +6,7 @@
  * serves it on its own `/mcp` (one connector for every app, names prefixed
  * `openmail_`) and on the app's host `/mcp`. It signs the caller in
  * (OAuth or a personal access token), applies the connection's read-only or
- * read-write choice, hides `destructive` tools until approvals exist, and
+ * read-write choice (a `destructive` tool is a write clients confirm), and
  * calls a tool here over the internal tools contract with an identity minted
  * for that one call (`chan: "mcp"`), which everyApp() verifies before any
  * handler runs. Tool calls get 30 seconds.
@@ -413,8 +413,9 @@ export const tools = defineTools(
 		delete_email: {
 			title: "Delete an email",
 			description: "Permanently delete an email by ID.",
-			// Hidden from AI clients until the gateway has approvals.
-			risk: "destructive",
+			// A write marked destructive: clients ask before calling it.
+			risk: "write",
+			destructive: true,
 			input: plainSchema(z.object({ mailboxId, emailId: emailId.describe("The email ID to delete") })),
 			handler: async ({ mailboxId, emailId }, context) => {
 				const env = await toolEnv(context);

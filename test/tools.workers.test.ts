@@ -368,7 +368,7 @@ describe("tool calls", () => {
 		expect((await callTool("list_mailboxes", {}, { env: pinned })).body.result?.isError).toBeUndefined();
 	});
 
-	it("a read-only connection can't send, and nobody can delete until the gateway has approvals", async () => {
+	it("a read-only connection can't send or delete", async () => {
 		const address = await newMailbox();
 		const id = await inboundEmail(address);
 		const send = await callTool(
@@ -379,9 +379,9 @@ describe("tool calls", () => {
 		expect(send.status).toBe(403);
 		expect(send.body.error).toMatchObject({ code: "forbidden", message: "Calling send_email needs the mcp:write scope." });
 
-		const remove = await callTool("delete_email", { mailboxId: address, emailId: id });
+		const remove = await callTool("delete_email", { mailboxId: address, emailId: id }, { scopes: [MCP_READ_SCOPE] });
 		expect(remove.status).toBe(403);
-		expect(remove.body.error).toMatchObject({ code: "forbidden", message: "Calling delete_email needs the mcp:destructive scope." });
+		expect(remove.body.error).toMatchObject({ code: "forbidden", message: "Calling delete_email needs the mcp:write scope." });
 		expect(((await mailbox(address).getEmails({ folder: Folders.INBOX })) as unknown[]).length).toBe(1);
 	});
 

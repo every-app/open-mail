@@ -103,10 +103,10 @@ describe("model ids", () => {
 		expect(manifest.ai.chat).toEqual({
 			why: "The inbox agent's model, with the prompt-injection scanner and the draft verifier.",
 		});
-		// Every pin the code knows is declared, optional: nobody sets either for the default.
-		expect(manifest.providers.map((p) => [p.id, p.optional])).toEqual([
-			["openrouter", true],
-			["workers-ai", true],
+		// Every pin the code knows is declared, each in an optional feature: nobody sets either for the default.
+		expect(Object.values(manifest.features).map((f) => [f.providers, "required" in f])).toEqual([
+			[["openrouter"], false],
+			[["workers-ai"], false],
 		]);
 		expect([...manifest.providers.map((p) => p.id), "default"].sort()).toEqual(Object.keys(PROVIDERS).sort());
 	});

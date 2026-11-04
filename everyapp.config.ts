@@ -43,22 +43,32 @@ export default {
       "moonshotai/kimi-k2.6",
     ],
   },
-  // The pins, both optional: a Worker built with AI_PROVIDER=openrouter or
-  // workers-ai calls that provider's own route, which the gateway serves
-  // only to an app that lists it. Nobody needs to set either for the
-  // default.
+  // The pins: a Worker built with AI_PROVIDER=openrouter or workers-ai calls
+  // that provider's own route, which the gateway serves only to an app that
+  // lists it. Each is an optional feature below: nobody needs to set either
+  // for the default.
   providers: [
     {
       id: "openrouter",
-      optional: true,
       why: "Only for a Worker built with AI_PROVIDER=openrouter (a pin); the default model needs no provider of its own.",
     },
     {
       id: "workers-ai",
-      optional: true,
       why: "Only for a Worker built with AI_PROVIDER=workers-ai (a pin); the default model needs no provider of its own.",
     },
   ],
+  features: {
+    "openrouter-pin": {
+      name: "OpenRouter pin",
+      why: "Only for a Worker built with AI_PROVIDER=openrouter: it calls OpenRouter's own route instead of the default model.",
+      providers: ["openrouter"],
+    },
+    "workers-ai-pin": {
+      name: "Workers AI pin",
+      why: "Only for a Worker built with AI_PROVIDER=workers-ai: it calls Workers AI's own route instead of the default model.",
+      providers: ["workers-ai"],
+    },
+  },
   // Configure this installation's addresses with `everyapp email set
   // --sender <pattern> --inbound <address>` after its first deploy.
   capabilities: {

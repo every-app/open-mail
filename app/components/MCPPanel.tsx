@@ -41,8 +41,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
 /**
  * The tools MCP clients see: a static copy of the names in the app's tool
- * catalog (workers/everyapp/tools.ts), less `delete_email`, which the gateway
- * hides from AI clients until it has approvals. test/tools.test.ts keeps this
+ * catalog (workers/everyapp/tools.ts). test/tools.test.ts keeps this
  * list in step with the catalog. `risk` is the catalog's.
  */
 export const MCP_TOOLS = [
@@ -58,6 +57,7 @@ export const MCP_TOOLS = [
 	{ name: "send_email", desc: "Send a new email", risk: "write" },
 	{ name: "mark_email_read", desc: "Mark email as read/unread", risk: "write" },
 	{ name: "move_email", desc: "Move email to a folder", risk: "write" },
+	{ name: "delete_email", desc: "Permanently delete an email", risk: "write" },
 	{ name: "list_labels", desc: "List labels", risk: "read" },
 	{ name: "create_label", desc: "Create a label", risk: "write" },
 	{ name: "label_conversation", desc: "Add or remove a conversation's labels", risk: "write" },
