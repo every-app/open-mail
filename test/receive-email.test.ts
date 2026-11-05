@@ -21,10 +21,10 @@ afterEach(() => vi.restoreAllMocks());
 
 let count = 0;
 
-/** A mailbox of its own for each test (storage is shared across tests). */
-async function newMailbox(): Promise<string> {
+/** A mailbox of its own for each test (storage is shared across tests); auto-drafting on unless `settings` say otherwise. */
+async function newMailbox(settings: Record<string, unknown> = { autoDraft: true }): Promise<string> {
 	const address = `inbox-${Date.now()}-${count++}@example.com`;
-	await env.BUCKET.put(`mailboxes/${address}.json`, JSON.stringify({ fromName: "Dev" }));
+	await env.BUCKET.put(`mailboxes/${address}.json`, JSON.stringify({ fromName: "Dev", ...settings }));
 	return address;
 }
 
@@ -100,6 +100,15 @@ describe("inbound mail: email() and receiveEmail()", () => {
 				threadId: email.id,
 			},
 		]);
+	});
+
+	it("files the message but doesn't wake the agent while the mailbox's auto-drafting is off (the default)", async () => {
+		for (const settings of [{}, { autoDraft: false }]) {
+			const address = await newMailbox(settings);
+			await deliver(fixtureTo(address));
+			expect(await mailbox(address).getEmails({ folder: "inbox" })).toHaveLength(1);
+			expect(agentCalls(address)).toEqual([]);
+		}
 	});
 
 	it("reaches the agent of a mailbox nobody has opened yet (receiveEmail alone can't)", async () => {

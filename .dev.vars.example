@@ -30,3 +30,9 @@
 # EMAIL_REST_API_TOKEN=
 # EMAIL_FROM=
 # EMAIL_FROM_NAME=
+#
+# Gmail (experimental, off by default; docs/GMAIL.md): true shows Connect
+# Gmail and the Gmail UI. With GOOGLE_WORKSPACE_ACCESS_TOKEN (gmail.modify and
+# gmail.send scopes) Gmail calls go straight to Google with your token.
+# EXPERIMENTAL_GMAIL=true
+# GOOGLE_WORKSPACE_ACCESS_TOKEN=

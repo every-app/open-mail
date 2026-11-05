@@ -68,6 +68,25 @@ export default {
       why: "Only for a Worker built with AI_PROVIDER=workers-ai: it calls Workers AI's own route instead of the default model.",
       providers: ["workers-ai"],
     },
+    // Experimental and off by default: OpenMail shows nothing of Gmail
+    // until EXPERIMENTAL_GMAIL is true (workers/everyapp/gmail/flag.ts).
+    // Optional, so the Google client isn't needed to open the app.
+    gmail: {
+      name: "Gmail (experimental)",
+      why: "Mirrors each person's own Gmail in OpenMail, with the agent's reply drafts. Experimental: off unless EXPERIMENTAL_GMAIL is true.",
+      steps: [
+        "Set up the Gateway's Google OAuth client: `everyapp secret set GOOGLE_WORKSPACE_CLIENT_ID GOOGLE_WORKSPACE_CLIENT_SECRET`.",
+        "Set EXPERIMENTAL_GMAIL to true with `everyapp configure openmail`.",
+      ],
+      settings: [
+        {
+          name: "EXPERIMENTAL_GMAIL",
+          type: "boolean",
+          how: "true turns on Connect Gmail and Gmail mailboxes; anything else keeps Gmail hidden.",
+        },
+      ],
+      capabilities: ["google-workspace"],
+    },
   },
   // Configure this installation's addresses with `everyapp email set
   // --sender <pattern> --inbound <address>` after its first deploy.
@@ -77,7 +96,8 @@ export default {
       why: "Sends mail from the organization's mailboxes on its own domain.",
     },
     // Each person's own Gmail, through the Gateway's held-token proxy
-    // (docs/GMAIL.md). A person connects once, in OpenMail, and Google's
+    // (docs/GMAIL.md). Optional: only the experimental `gmail` feature
+    // above lists it. A person connects once, in OpenMail, and Google's
     // screen shows exactly these two scopes. gmail.modify covers reading,
     // drafts, labels and trash; gmail.send is for Send in OpenMail. The
     // Gateway adds the sign-in scopes for the account's name itself, and

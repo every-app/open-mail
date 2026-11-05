@@ -405,6 +405,15 @@ describe("tool calls", () => {
 		expect(sync).not.toHaveBeenCalled();
 	});
 
+	it("sync_mailbox refuses while the experimental Gmail integration is off", async () => {
+		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
+		const sync = vi.spyOn(gmailOps, "sync");
+		const answer = await callTool("sync_mailbox", { mailboxId: address }, { env: { EXPERIMENTAL_GMAIL: "" } });
+		expect(answer.body.result?.isError).toBe(true);
+		expect(textOf(answer)).toContain("EXPERIMENTAL_GMAIL");
+		expect(sync).not.toHaveBeenCalled();
+	});
+
 	it("sync_mailbox goes to the Gmail side for the caller's Gmail mailbox, with the call's request", async () => {
 		const address = await newMailbox({ ownerId: CALLER, provider: "gmail" });
 		const sync = vi.spyOn(gmailOps, "sync").mockResolvedValue({ pulled: 2, pushed: 1 });

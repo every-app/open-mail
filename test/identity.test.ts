@@ -426,11 +426,19 @@ describe("GET /api/v1/me", () => {
 				orgId: ORG,
 				role: "admin",
 				gatewayUrl: ISSUER,
+				gmail: false,
 			},
 		});
 		expect((await send(env, "GET", "/api/v1/me", { as: "member" })).body).toMatchObject({ role: "member" });
 		expect((await send(env, "GET", "/api/v1/me", { as: "owner" })).body).toMatchObject({ role: "owner" });
 		expect((await send(env, "GET", "/api/v1/me", { as: "guest" })).body).toMatchObject({ role: "member" });
+	});
+
+	it("says whether the experimental Gmail integration is on (EXPERIMENTAL_GMAIL)", async () => {
+		for (const [value, gmail] of [["true", true], ["TRUE", true], ["false", false], ["", false]] as const) {
+			const { env } = makeEnv({ EXPERIMENTAL_GMAIL: value });
+			expect((await send(env, "GET", "/api/v1/me", { as: "member" })).body).toMatchObject({ gmail });
+		}
 	});
 
 	it("falls back to the identity issuer's origin where GATEWAY_URL isn't set (everyapp dev)", () => {

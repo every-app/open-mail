@@ -12,6 +12,7 @@ import ShortcutsDialog from "~/components/ShortcutsDialog";
 import Sidebar from "~/components/Sidebar";
 import TopBar from "~/components/TopBar";
 // Gmail (docs/GMAIL.md): the sync poll and its status line (and background drafting), for a Gmail mailbox.
+import GmailOnly from "~/components/gmail/GmailOnly";
 import GmailSync from "~/components/gmail/GmailSync";
 import { Button } from "~/components/ui/button";
 import {
@@ -140,7 +141,9 @@ export default function MailboxRoute() {
 			<MailRouteSync />
 			<GlobalHotkeys mailboxId={mailboxId} />
 			<TopBar />
-			<GmailSync mailboxId={mailboxId} />
+			<GmailOnly>
+				<GmailSync mailboxId={mailboxId} />
+			</GmailOnly>
 
 			<div className="flex min-h-0 flex-1">
 				{/* Sidebar: full or icon rail on desktop */}

@@ -82,6 +82,9 @@ export default defineConfig({
                   EMAIL_ADDRESSES: [],
                   AI_PROVIDER: "",
                   AGENT_MODEL: "",
+                  // The gmail feature's switch, on so the Gmail tests reach
+                  // its routes and alarm; tests of the off state pass "".
+                  EXPERIMENTAL_GMAIL: "true",
                   EVERYAPP_APP_ID: manifest.id,
                   EVERYAPP_AUDIENCE: `every-acme-${manifest.id}`,
                   EVERYAPP_IDENTITY_ISSUER: "https://gateway.example.com",

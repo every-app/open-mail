@@ -121,4 +121,24 @@ describe("background sync on the owner's behalf", () => {
 		expect(await sync(address).backgroundView()).toMatchObject({ state: "off", code: "gmail_mailbox_gone" });
 		expect(await alarmAt(address)).toBeNull();
 	});
+
+	it("stops while the experimental Gmail integration is off", async () => {
+		const address = await gmailMailbox("u-owner-off");
+		const gmail = fakeGmail(address);
+		const targets = await useFake(address, gmail.fetch);
+		expect((await sync(address).sync(address, person())).error).toBeUndefined();
+		const before = targets.length;
+		await runInDurableObject(sync(address), async (instance: GmailSync) => {
+			const on = (instance as unknown as { env: object }).env;
+			Object.assign(instance, { env: { ...on, EXPERIMENTAL_GMAIL: "" } });
+			try {
+				await instance.alarm();
+			} finally {
+				Object.assign(instance, { env: on });
+			}
+		});
+		expect(targets.length).toBe(before);
+		expect(await sync(address).backgroundView()).toMatchObject({ state: "off", code: "gmail_disabled" });
+		await runInDurableObject(sync(address), (_instance: GmailSync, state) => state.storage.deleteAlarm());
+	});
 });

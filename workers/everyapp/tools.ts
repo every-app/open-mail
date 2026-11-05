@@ -55,6 +55,7 @@ import {
 import type { Env } from "../types";
 import { withGateway } from "./gateway";
 import { gmailOps } from "./gmail-tools-port";
+import { GMAIL_DISABLED_MESSAGE, gmailEnabled } from "./gmail/flag";
 import { requireOrganization } from "./identity";
 import {
 	type PortMailboxSettings,
@@ -70,9 +71,10 @@ export const INSTRUCTIONS =
 	"Mailbox ids are email addresses: call list_mailboxes first and pass one as mailboxId. " +
 	"Folders are inbox, sent, draft, archive and trash. " +
 	"draft_reply, create_draft and update_draft only save drafts, which a person reviews and sends from the inbox. " +
+	"New mail isn't drafted automatically unless a mailbox's settings turn that on: draft replies with draft_reply. " +
 	"send_reply and send_email send immediately, from the mailbox's own address, except from a Gmail mailbox (they refuse: save a draft instead); call them only after the person has confirmed the recipient and the text. " +
 	"Labels tag conversations (several each, names may nest with /); folders say where a message is. On a Gmail mailbox they are its Gmail labels. " +
-	"sync_mailbox works on Gmail mailboxes. " +
+	"sync_mailbox works on Gmail mailboxes (an experimental integration, off unless turned on). " +
 	"Bodies are HTML. Every call acts as the person who connected this client.";
 
 /**
@@ -509,11 +511,12 @@ export const tools = defineTools(
 		sync_mailbox: {
 			title: "Sync with Gmail",
 			description:
-				"Sync a Gmail mailbox now: send OpenMail's pending changes (drafts, labels, moves) to Gmail and pull new mail. This tool works on Gmail mailboxes.",
+				"Sync a Gmail mailbox now: send OpenMail's pending changes (drafts, labels, moves) to Gmail and pull new mail. This tool works on Gmail mailboxes. Gmail is experimental: it refuses unless the installation turned it on.",
 			risk: "write",
 			input: plainSchema(z.object({ mailboxId })),
 			handler: async ({ mailboxId }, context) => {
 				const env = await toolEnv(context);
+				if (!gmailEnabled(env)) throw new ToolError(GMAIL_DISABLED_MESSAGE);
 				const mailbox = await requireGmailMailbox(env, mailboxId, context.user, "sync_mailbox");
 				return gmailOps.sync(env, mailbox, context.request);
 			},

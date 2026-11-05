@@ -14,6 +14,8 @@ export interface MailboxSettings {
 	signature?: SignatureSettings;
 	autoReply?: { enabled: boolean; subject: string; message: string };
 	agentSystemPrompt?: string;
+	/** The agent drafts a reply to each new email on its own; off unless true (workers/everyapp/mailbox-settings.ts). */
+	autoDraft?: boolean;
 }
 
 export interface Mailbox {

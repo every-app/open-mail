@@ -16,6 +16,7 @@ import EmailPanelDialogs from "~/components/email-panel/EmailPanelDialogs";
 import EmailPanelToolbar, { type ListPosition } from "~/components/email-panel/EmailPanelToolbar";
 import ThreadMessage from "~/components/email-panel/ThreadMessage";
 // Gmail (docs/GMAIL.md): "Open in Gmail" beside an agent draft's Send.
+import GmailOnly from "~/components/gmail/GmailOnly";
 import { GmailDraftButton } from "~/components/gmail/GmailMessageExtras";
 import { LabelChip } from "~/components/labels/LabelChip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
@@ -496,7 +497,11 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 							onEdit={() => editDraft(draft)}
 							onSend={() => void sendDraft(draft)}
 							onDiscard={() => void discardDraft(draft)}
-							extraActions={<GmailDraftButton mailboxId={mailboxId} emailId={draft.id} />}
+							extraActions={
+								<GmailOnly>
+									<GmailDraftButton mailboxId={mailboxId} emailId={draft.id} />
+								</GmailOnly>
+							}
 						/>
 					))}
 

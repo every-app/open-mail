@@ -57,6 +57,7 @@ import { useDocumentTitle } from "~/hooks/useDocumentTitle";
 import { mailboxDisplayName } from "~/lib/utils";
 // Gmail (docs/GMAIL.md): the connect card and the rows' Gmail tag.
 import ConnectGmailCard, { GmailMailboxBadge } from "~/components/gmail/ConnectGmailCard";
+import GmailOnly from "~/components/gmail/GmailOnly";
 import { useFolders } from "~/queries/folders";
 import { queryKeys } from "~/queries/keys";
 import { useCreateMailbox, useDeleteMailbox, useMailboxes } from "~/queries/mailboxes";
@@ -217,7 +218,9 @@ export default function HomeRoute() {
 					/>
 
 					<SetupBanner noDomain={noDomain} sendingOff={sendingOff} isAdmin={isAdmin} />
-					<ConnectGmailCard />
+					<GmailOnly>
+						<ConnectGmailCard />
+					</GmailOnly>
 
 					{isLoading ? (
 						<MailboxListSkeleton />
@@ -229,7 +232,11 @@ export default function HomeRoute() {
 									id={account.id}
 									email={account.email}
 									name={account.name}
-									badge={<GmailMailboxBadge mailbox={account} />}
+									badge={
+										<GmailOnly>
+											<GmailMailboxBadge mailbox={account} />
+										</GmailOnly>
+									}
 									onDelete={
 										canManage
 											? () => setMailboxToDelete({ id: account.id, email: account.email })

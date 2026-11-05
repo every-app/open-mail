@@ -28,6 +28,22 @@ export interface PortMailboxSettings {
 	provider?: "gmail";
 	/** How the agent should reply, learned with the person. */
 	replyRules?: ReplyRule[];
+	/**
+	 * Whether the agent drafts a reply to each new inbound email on its own.
+	 * Off unless `true` (absent on every mailbox made before it): replies
+	 * are drafted when asked, over MCP (`draft_reply`) or in the agent's chat.
+	 */
+	autoDraft?: boolean;
+}
+
+/** Whether new mail gets an auto-draft: only when the mailbox's settings turn it on. */
+export function autoDraftOn(settings: unknown): boolean {
+	return asSettings(settings).autoDraft === true;
+}
+
+/** autoDraftOn() for a mailbox by address; a missing or unreadable settings file is off. */
+export async function mailboxAutoDraftOn(bucket: R2Bucket, mailboxId: string): Promise<boolean> {
+	return autoDraftOn(await readMailboxSettings(bucket, mailboxId).catch(() => null));
 }
 
 export function mailboxKey(mailboxId: string): string {

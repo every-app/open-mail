@@ -192,6 +192,8 @@ export interface Me {
 	 * dev` or a deploy, which both set the identity issuer).
 	 */
 	gatewayUrl: string | null;
+	/** Whether the experimental Gmail integration is on (EXPERIMENTAL_GMAIL); off, nothing of Gmail shows. */
+	gmail: boolean;
 }
 
 // ---------- API client ----------

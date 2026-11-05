@@ -63,7 +63,7 @@ export const MCP_TOOLS = [
 	{ name: "label_conversation", desc: "Add or remove a conversation's labels", risk: "write" },
 	// Gmail (docs/GMAIL.md): the port's Gmail tools.
 	{ name: "archive_email", desc: "Archive an email", risk: "write" },
-	{ name: "sync_mailbox", desc: "Sync a Gmail mailbox now", risk: "write" },
+	{ name: "sync_mailbox", desc: "Sync a Gmail mailbox now", risk: "write", gmail: true },
 ] as const;
 
 /** A titled card with a value to paste and its copy button, and notes under it. */
@@ -98,6 +98,8 @@ export default function MCPPanel() {
 	const gatewayOrigin = me?.gatewayUrl?.replace(/\/+$/, "");
 	const gatewayMcpUrl = gatewayOrigin ? `${gatewayOrigin}/mcp` : null;
 	const appMcpUrl = `${appOrigin}/mcp`;
+	// The Gmail tool stays in the catalog but refuses while the experimental integration is off: not listed then.
+	const shownTools = MCP_TOOLS.filter((tool) => !("gmail" in tool) || me?.gmail === true);
 
 	return (
 		<div className="h-full space-y-4 overflow-y-auto px-3 py-4">
@@ -169,7 +171,7 @@ export default function MCPPanel() {
 				<div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
 					<table className="w-full text-xs">
 						<tbody className="divide-y divide-border">
-							{MCP_TOOLS.map((tool) => (
+							{shownTools.map((tool) => (
 								<tr key={tool.name}>
 									<td className="py-1.5 pr-2 pl-3 align-top">
 										<div className="font-mono font-medium">{tool.name}</div>

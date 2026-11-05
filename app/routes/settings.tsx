@@ -33,6 +33,7 @@ import { useDeleteMailbox, useMailbox, useUpdateMailbox } from "~/queries/mailbo
 import api, { meQuery } from "~/services/api";
 import type { Mailbox } from "~/types";
 // Gmail (docs/GMAIL.md): the Google account and Reconnect.
+import GmailOnly from "~/components/gmail/GmailOnly";
 import GmailSettings from "~/components/gmail/GmailSettings";
 
 // An example shown in the empty textarea. The default instructions live in
@@ -45,6 +46,7 @@ interface Form {
 	signatureEnabled: boolean;
 	signatureText: string;
 	agentPrompt: string;
+	autoDraft: boolean;
 }
 
 function formOf(mailbox: Mailbox): Form {
@@ -53,6 +55,7 @@ function formOf(mailbox: Mailbox): Form {
 		signatureEnabled: mailbox.settings?.signature?.enabled ?? false,
 		signatureText: mailbox.settings?.signature?.text ?? "",
 		agentPrompt: mailbox.settings?.agentSystemPrompt || "",
+		autoDraft: mailbox.settings?.autoDraft === true,
 	};
 }
 
@@ -61,7 +64,8 @@ function sameForm(a: Form, b: Form) {
 		a.fromName === b.fromName &&
 		a.signatureEnabled === b.signatureEnabled &&
 		a.signatureText === b.signatureText &&
-		a.agentPrompt === b.agentPrompt
+		a.agentPrompt === b.agentPrompt &&
+		a.autoDraft === b.autoDraft
 	);
 }
 
@@ -122,6 +126,7 @@ export default function SettingsRoute() {
 				html: form.signatureText === (previous?.text ?? "") ? previous?.html : undefined,
 			},
 			agentSystemPrompt: form.agentPrompt.trim() || undefined,
+			autoDraft: form.autoDraft,
 		};
 		try {
 			await updateMailbox.mutateAsync({ mailboxId, settings });
@@ -214,6 +219,18 @@ export default function SettingsRoute() {
 					>
 						<SettingsCard>
 							<SettingsRow
+								label="Draft replies automatically"
+								description="Off: the agent drafts a reply only when asked, from an AI client over MCP or in its chat. On: it drafts one for each new email as it arrives."
+								htmlFor="auto-draft"
+							>
+								<Switch
+									id="auto-draft"
+									checked={form.autoDraft}
+									onCheckedChange={(checked) => update({ autoDraft: checked })}
+									disabled={readOnly}
+								/>
+							</SettingsRow>
+							<SettingsRow
 								label={
 									<span className="flex items-center gap-2">
 										Agent instructions
@@ -236,7 +253,9 @@ export default function SettingsRoute() {
 						</SettingsCard>
 					</SettingsSection>
 
-					<GmailSettings mailbox={mailbox} />
+					<GmailOnly>
+						<GmailSettings mailbox={mailbox} />
+					</GmailOnly>
 
 					<SettingsSection title="Appearance" description="Saved on this device, for every mailbox.">
 						<SettingsCard>

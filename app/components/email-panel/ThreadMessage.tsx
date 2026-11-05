@@ -23,6 +23,7 @@ import { formatDetailDate, formatListDate, getNonInlineAttachments, stripHtml, u
 import type { Email } from "~/types";
 // Gmail (docs/GMAIL.md): the message's Gmail labels and the drafting status of the reply to it.
 import GmailMessageExtras from "~/components/gmail/GmailMessageExtras";
+import GmailOnly from "~/components/gmail/GmailOnly";
 
 export interface ThreadMessageActions {
 	onReply: () => void;
@@ -251,7 +252,9 @@ export default function ThreadMessage({
 						className="mt-4 border-t border-border pt-3"
 						showHeading
 					/>
-					<GmailMessageExtras mailboxId={mailboxId} email={email} showOpenInGmail={false} className="mt-3" />
+					<GmailOnly>
+						<GmailMessageExtras mailboxId={mailboxId} email={email} showOpenInGmail={false} className="mt-3" />
+					</GmailOnly>
 				</div>
 			</div>
 		</article>

@@ -70,6 +70,16 @@ describe("the first sync", () => {
 		expect(draftJobs(h.deps)).toEqual([{ emailId: "m7", threadId: "t7", state: "queued", queuedAt: h.clock.now, estimateMs: DEFAULT_ESTIMATE_MS }]);
 	});
 
+	it("drafts nothing, and queues no drafting job, while the mailbox's auto-drafting is off", async () => {
+		const h = seeded();
+		h.autoDraft.on = false;
+		h.gmail.add({ id: "m7", threadId: "t7", labelIds: ["INBOX", "UNREAD"], internalDate: String(h.clock.now - 3 * HOUR), raw: rfc822({ subject: "Refund?", from: "carol@example.org" }) });
+		await runSync(h.deps);
+		expect(h.mailbox.emails.has("m7")).toBe(true);
+		expect(h.pokes).toEqual([]);
+		expect(draftJobs(h.deps)).toEqual([]);
+	});
+
 	it("asks Gmail for the last 30 days of inbox and sent mail", async () => {
 		const h = seeded();
 		await runSync(h.deps);

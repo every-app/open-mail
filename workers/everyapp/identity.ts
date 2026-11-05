@@ -17,6 +17,7 @@
  */
 import type { EveryAppUser } from "@every-app/sdk/server";
 import type { MiddlewareHandler } from "hono";
+import { gmailEnabled } from "./gmail/flag";
 import { asSettings, canUseMailbox, readMailboxSettings } from "./mailbox-settings";
 
 /** The verified user of each request, set by the entry for the routes. */
@@ -152,6 +153,8 @@ export interface Me {
 	orgId: string;
 	role: Role;
 	gatewayUrl: string | null;
+	/** Whether the experimental Gmail integration is on (EXPERIMENTAL_GMAIL); off, the UI shows nothing of Gmail. */
+	gmail: boolean;
 }
 
 export function me(user: EveryAppUser, env: object): Me {
@@ -161,6 +164,7 @@ export function me(user: EveryAppUser, env: object): Me {
 		orgId: user.orgId,
 		role: roleOf(user),
 		gatewayUrl: gatewayUrlOf(env),
+		gmail: gmailEnabled(env),
 	};
 }
 

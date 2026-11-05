@@ -10,6 +10,9 @@
  *   GET  /api/v1/mailboxes/:id/gmail/drafting                the owner
  *   GET  /api/v1/mailboxes/:id/emails/:emailId/gmail-link    the owner
  *
+ * While the experimental integration is off (EXPERIMENTAL_GMAIL, ./flag.ts)
+ * every one of them answers 404, as if it weren't there.
+ *
  * Labels have no Gmail routes: a Gmail mailbox's labels are OpenMail's own
  * (../labels.ts), kept in step with Gmail's by the sync (./label-sync.ts).
  *
@@ -25,11 +28,23 @@ import type { Env } from "../../types";
 import { users } from "../identity";
 import { canUseMailbox, mailboxKey, readMailboxSettings, type PortMailboxSettings } from "../mailbox-settings";
 import { GOOGLE_PROVIDER, gmailClient } from "./client";
+import { gmailEnabled } from "./flag";
 import { forwardTarget, gmailSyncOf, knownFailure, type GmailErrorInfo } from "./target";
 
 type GmailContext = { Bindings: Env; Variables: { mailboxId: string } };
 
 export const gmailRoutes = new Hono<GmailContext>();
+
+/** Off (./flag.ts): the route isn't there. */
+const requireGmailEnabled: MiddlewareHandler<GmailContext> = async (c, next) => {
+	if (!gmailEnabled(c.env)) return c.json({ error: "Not found" }, 404);
+	await next();
+};
+
+// Path by path: the routes mount at "/", so a "*" here would run for every request.
+gmailRoutes.use("/api/v1/gmail/*", requireGmailEnabled);
+gmailRoutes.use("/api/v1/mailboxes/:mailboxId/gmail/*", requireGmailEnabled);
+gmailRoutes.use("/api/v1/mailboxes/:mailboxId/emails/:emailId/gmail-link", requireGmailEnabled);
 
 /** Where the Gateway sends the person back after connecting: `?returnTo=` on this origin, else the app's root. */
 function returnToOf(c: Context<GmailContext>): string {

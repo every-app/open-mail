@@ -37,8 +37,9 @@ import {
 	type SyncDeps,
 	type SyncResult,
 } from "./engine";
+import { GMAIL_DISABLED_MESSAGE, gmailEnabled } from "./flag";
 import { GmailStore, type OutboxOp, type Sql } from "./store";
-import { readMailboxSettings } from "../mailbox-settings";
+import { mailboxAutoDraftOn, readMailboxSettings } from "../mailbox-settings";
 import {
 	canReachGmail,
 	knownFailure,
@@ -193,6 +194,11 @@ export class GmailSync extends DurableObject<Cloudflare.Env> {
 	 * mailbox, or one that is no longer Gmail or has no owner, stops it.
 	 */
 	override async alarm(): Promise<void> {
+		if (!gmailEnabled(this.env)) {
+			// The experimental integration is off (./flag.ts): stop until a person syncs with it on.
+			this.setBackground({ state: "off", at: Date.now(), code: "gmail_disabled", message: GMAIL_DISABLED_MESSAGE });
+			return;
+		}
 		const mailboxId = this.store.get<string>("address");
 		const settings = mailboxId ? await readMailboxSettings(this.env.BUCKET, mailboxId).catch(() => null) : null;
 		if (!mailboxId || settings?.provider !== "gmail" || !settings.ownerId) {
@@ -309,6 +315,7 @@ export class GmailSync extends DurableObject<Cloudflare.Env> {
 			bucket: this.env.BUCKET,
 			address: mailboxId,
 			pokeAgent: (email) => this.pokeAgent(email),
+			autoDraft: () => mailboxAutoDraftOn(this.env.BUCKET, mailboxId),
 		};
 	}
 

@@ -298,6 +298,24 @@ describe("the Gmail routes", () => {
 		expect((await call("GET", `/api/v1/mailboxes/${address}/emails/nope/gmail-link`, owner)).status).toBe(404);
 	});
 
+	it("every Gmail route is 404 while the experimental integration is off", async () => {
+		const address = await mailbox({ provider: "gmail", ownerId: owner.id });
+		const off = { EXPERIMENTAL_GMAIL: "" };
+		for (const [method, path] of [
+			["GET", "/api/v1/gmail/status"],
+			["POST", "/api/v1/gmail/mailboxes"],
+			["POST", `/api/v1/mailboxes/${address}/gmail/sync`],
+			["GET", `/api/v1/mailboxes/${address}/gmail/drafting`],
+			["GET", `/api/v1/mailboxes/${address}/emails/m1/gmail-link`],
+		] as const) {
+			expect(await call(method, path, owner, off), `${method} ${path}`).toEqual({ status: 404, body: { error: "Not found" } });
+		}
+		// The gate is path by path (the routes mount at "/"): any other path falls through it untouched.
+		const other = new Request("https://openmail.example.com/api/v1/mailboxes/x/labels");
+		users.set(other, owner as never);
+		expect(await (await gmailRoutes.fetch(other, withGateway({ ...base, ...off } as unknown as Cloudflare.Env, other))).text()).toBe("404 Not Found");
+	});
+
 	it("a native mailbox has no Gmail routes; a refused connection asks the person to connect", async () => {
 		const native = await mailbox({ ownerId: owner.id });
 		expect((await call("POST", `/api/v1/mailboxes/${native}/gmail/sync`, owner)).body.error).toBe("not_gmail");

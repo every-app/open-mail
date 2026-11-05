@@ -141,6 +141,8 @@ export function harness(gmail: FakeGmail = fakeGmail(ADDRESS), clock = { now: Da
 	const mailbox = fakeMailbox();
 	const bucket = fakeBucket();
 	const pokes: NewEmail[] = [];
+	// The mailbox's `autoDraft` setting; on here, so the engine's auto-draft tests poke the agent.
+	const autoDraft = { on: true };
 	const deps: SyncDeps = {
 		store,
 		gmail: gmailClient({}, new Request("https://openmail.example.com/"), gmail.fetch),
@@ -148,7 +150,8 @@ export function harness(gmail: FakeGmail = fakeGmail(ADDRESS), clock = { now: Da
 		bucket,
 		address: ADDRESS,
 		pokeAgent: (email) => pokes.push(email),
+		autoDraft: async () => autoDraft.on,
 		now: () => clock.now,
 	};
-	return { deps, store, mailbox, bucket, pokes, gmail, clock };
+	return { deps, store, mailbox, bucket, pokes, gmail, clock, autoDraft };
 }

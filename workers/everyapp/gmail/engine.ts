@@ -66,6 +66,8 @@ export interface SyncDeps {
 	address: string;
 	/** Start the agent's auto-draft for one email (fire and forget). */
 	pokeAgent?: (email: NewEmail) => void;
+	/** Whether the mailbox's settings turn auto-drafting on (`autoDraft`); absent or false: no auto-drafts, no drafting jobs. */
+	autoDraft?: () => Promise<boolean>;
 	now?: () => number;
 	/** What a run changed besides new mail (runSync sets it). */
 	tally?: { labels: number };
@@ -178,7 +180,7 @@ export async function pull(deps: SyncDeps): Promise<number> {
 	// pull, only the newest unread inbox threads (the rest is backlog).
 	const fromHistory = candidates.slice(0, before);
 	const fromBackfill = firstPull ? firstPullDraftable(deps, candidates.slice(before)) : [];
-	startAutoDrafts(deps, [...fromHistory.filter((m) => isInboundNew(deps, m)), ...fromBackfill]);
+	await startAutoDrafts(deps, [...fromHistory.filter((m) => isInboundNew(deps, m)), ...fromBackfill]);
 	return pulled;
 }
 
@@ -423,8 +425,9 @@ function firstPullDraftable(deps: SyncDeps, pulled: Ingested[]): Ingested[] {
 		.slice(0, FIRST_PULL_AUTO_DRAFTS);
 }
 
-function startAutoDrafts(deps: SyncDeps, emails: Ingested[]): void {
-	if (!deps.pokeAgent) return;
+async function startAutoDrafts(deps: SyncDeps, emails: Ingested[]): Promise<void> {
+	if (!deps.pokeAgent || emails.length === 0) return;
+	if (!(await deps.autoDraft?.().catch(() => false))) return;
 	const queuedAt = now(deps);
 	for (const m of emails.filter((e) => !deps.store.hasJob(e.localId)).slice(0, AUTO_DRAFTS_PER_SYNC)) {
 		deps.store.addJob(m.localId, m.threadId, queuedAt);
