@@ -263,7 +263,7 @@ describe("tool calls", () => {
 		for (const call of gateway.calls) expect(call.identity).toBe(answer.identity);
 		expect(gateway.calls[0]!.body).toMatchObject({ model: "default", max_tokens: 1024 });
 		expect(gateway.calls[1]!.body).toMatchObject({
-			from: { address },
+			from: { address, name: "Team" },
 			to: "alice@example.org",
 			subject: "Your order",
 			html: BODY,
@@ -305,6 +305,19 @@ describe("tool calls", () => {
 			isError: true,
 		});
 		expect(await mailbox(address).getEmails({ folder: Folders.SENT })).toEqual([]);
+	});
+
+	it("send_email refuses a mailbox with no sender name and sends nothing", async () => {
+		const address = await newMailbox({ ownerId: CALLER, fromName: "" });
+		const gateway = fakeGateway();
+		const answer = await callTool(
+			"send_email",
+			{ mailboxId: address, to: "alice@example.org", subject: "Your order", bodyHtml: BODY },
+			{ env: { EVERY_APP_GATEWAY: gateway.binding } },
+		);
+		expect(answer.body.result?.isError).toBe(true);
+		expect(textOf(answer)).toContain("has no sender name yet");
+		expect(gateway.calls).toEqual([]);
 	});
 
 	it("the send tools refuse on a Gmail mailbox, even the caller's own, and send nothing", async () => {

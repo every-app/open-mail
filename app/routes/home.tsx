@@ -118,8 +118,8 @@ export default function HomeRoute() {
 		let cancelled = false;
 		Promise.all(
 			toCreate.map((addr) => {
-				const localPart = addr.split("@")[0] || addr;
-				return api.createMailbox(addr, localPart).catch(() => {});
+				// No sender name until someone sets one in Settings: sending waits for it.
+				return api.createMailbox(addr, addr, { fromName: "" }).catch(() => {});
 			}),
 		).then(() => {
 			if (!cancelled) refetchMailboxes();
@@ -137,12 +137,12 @@ export default function HomeRoute() {
 	const handleCreate = async (e: FormEvent) => {
 		e.preventDefault();
 		setCreateError(null);
-		if (!newPrefix || !selectedDomain) {
+		const name = newName.trim();
+		if (!newPrefix || !selectedDomain || !name) {
 			setCreateError("Please fill in all fields");
 			return;
 		}
 		const email = `${newPrefix}@${selectedDomain}`;
-		const name = newName || newPrefix;
 		try {
 			await createMailbox.mutateAsync({ email, name });
 			toast.success("Mailbox created");
@@ -319,12 +319,13 @@ export default function HomeRoute() {
 								</div>
 							</Field>
 							<Field>
-								<FieldLabel htmlFor="mailbox-name">Sender name (optional)</FieldLabel>
+								<FieldLabel htmlFor="mailbox-name">Sender name</FieldLabel>
 								<Input
 									id="mailbox-name"
-									placeholder="Info"
+									placeholder="Ben from OpenSEO"
 									value={newName}
 									onChange={(e) => setNewName(e.target.value)}
+									required
 								/>
 							</Field>
 							{createError && <FieldError>{createError}</FieldError>}

@@ -233,10 +233,35 @@ export const GMAIL_SEND_REFUSED =
 	"AI clients can't send from a Gmail mailbox. Save a draft instead (draft_reply or create_draft): the person reviews it and sends it from OpenMail or Gmail.";
 
 /** The mailbox a send tool sends from: one the caller may use, never a Gmail one. */
-async function requireSendingMailbox(env: Pick<Env, "BUCKET">, id: string, user: ToolContext["user"]): Promise<string> {
+async function requireSendingMailbox(env: Env, id: string, user: ToolContext["user"]): Promise<{ mailbox: string; env: Env }> {
 	const { mailbox, settings } = await findToolMailbox(env, id, user);
 	if (settings.provider === "gmail") throw new ToolError(GMAIL_SEND_REFUSED);
-	return mailbox;
+	const fromName = (settings as Record<string, unknown>).fromName;
+	const name = typeof fromName === "string" ? fromName.trim() : "";
+	if (!name || name.toLowerCase() === mailbox) throw new ToolError(senderNameMissing(mailbox));
+	return { mailbox, env: withFromName(env, mailbox, name) };
+}
+
+function senderNameMissing(mailbox: string): string {
+	return `"${mailbox}" has no sender name yet. Ask the person to set one in OpenMail (the mailbox's Settings, "Sender name"); nothing is sent until they do.`;
+}
+
+/**
+ * `env` whose EMAIL sends from `mailbox` under `name`, the sender name from
+ * its settings, as the web app's compose does. lib/tools.ts passes the bare
+ * address as `from`, which would show recipients only its local part.
+ */
+function withFromName(env: Env, mailbox: string, name: string): Env {
+	const email = env.EMAIL;
+	const named: SendEmail = {
+		send: (message) =>
+			email.send(
+				"subject" in message && typeof message.from === "string" && message.from.toLowerCase() === mailbox
+					? { ...message, from: { email: message.from, name } }
+					: message,
+			),
+	} as SendEmail;
+	return { ...env, EMAIL: named };
 }
 
 /** The Gmail mailbox a Gmail-only tool acts on. */
@@ -442,9 +467,8 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, originalEmailId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(
-					await toolSendReply(env, await requireSendingMailbox(env, mailboxId, context.user), { originalEmailId, to, subject, bodyHtml }),
-				);
+				const sending = await requireSendingMailbox(env, mailboxId, context.user);
+				return unwrap(await toolSendReply(sending.env, sending.mailbox, { originalEmailId, to, subject, bodyHtml }));
 			},
 		},
 
@@ -464,7 +488,8 @@ export const tools = defineTools(
 			),
 			handler: async ({ mailboxId, to, subject, bodyHtml }, context) => {
 				const env = await toolEnv(context);
-				return unwrap(await toolSendEmail(env, await requireSendingMailbox(env, mailboxId, context.user), { to, subject, bodyHtml }));
+				const sending = await requireSendingMailbox(env, mailboxId, context.user);
+				return unwrap(await toolSendEmail(sending.env, sending.mailbox, { to, subject, bodyHtml }));
 			},
 		},
 

@@ -355,6 +355,16 @@ export function downloadFile(url: string, filename: string) {
 }
 
 /**
+ * The From name mail from this mailbox is sent under: the sender name set in
+ * Settings. There is no default: without one (or with the bare address) it is
+ * undefined, and sending waits until someone sets it.
+ */
+export function senderName(mailbox: Pick<Mailbox, "email" | "settings">): string | undefined {
+	const name = mailbox.settings?.fromName?.trim();
+	return name && name.toLowerCase() !== mailbox.email.toLowerCase() ? name : undefined;
+}
+
+/**
  * What a mailbox is called wherever the app names it: the sender name from
  * Settings, else the name it was created with, else the local part of its
  * address, as typed. Before the mailbox loads, the local part of its id.

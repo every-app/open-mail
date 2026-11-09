@@ -27,7 +27,7 @@ import { Switch } from "~/components/ui/switch";
 import { Textarea } from "~/components/ui/textarea";
 import { useDocumentTitle } from "~/hooks/useDocumentTitle";
 import { cn } from "~/lib/cn";
-import { mailboxDisplayName } from "~/lib/utils";
+import { mailboxDisplayName, senderName } from "~/lib/utils";
 import { queryKeys } from "~/queries/keys";
 import { useDeleteMailbox, useMailbox, useUpdateMailbox } from "~/queries/mailboxes";
 import api, { meQuery } from "~/services/api";
@@ -51,7 +51,7 @@ interface Form {
 
 function formOf(mailbox: Mailbox): Form {
 	return {
-		fromName: mailbox.settings?.fromName || mailbox.name || "",
+		fromName: senderName(mailbox) ?? "",
 		signatureEnabled: mailbox.settings?.signature?.enabled ?? false,
 		signatureText: mailbox.settings?.signature?.text ?? "",
 		agentPrompt: mailbox.settings?.agentSystemPrompt || "",
@@ -113,10 +113,14 @@ export default function SettingsRoute() {
 
 	const handleSave = async () => {
 		setSaveError(null);
+		if (!form.fromName.trim()) {
+			setSaveError("Enter a sender name. Mail from this mailbox isn't sent without one.");
+			return;
+		}
 		const previous = mailbox.settings?.signature;
 		const settings = {
 			...mailbox.settings,
-			fromName: form.fromName,
+			fromName: form.fromName.trim(),
 			signature: {
 				...previous,
 				enabled: form.signatureEnabled,
@@ -166,7 +170,11 @@ export default function SettingsRoute() {
 
 					<SettingsSection title="General" description="How this mailbox signs the mail it sends.">
 						<SettingsCard>
-							<SettingsRow label="Sender name" description="Shown as the From name." htmlFor="sender-name">
+							<SettingsRow
+								label="Sender name"
+								description={saved.fromName ? "Shown as the From name." : "Required: mail from this mailbox isn't sent until it has one."}
+								htmlFor="sender-name"
+							>
 								<Input
 									id="sender-name"
 									value={form.fromName}

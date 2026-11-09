@@ -12,6 +12,7 @@ import {
 	formatComposeDate,
 	getSignatureBlock,
 	htmlToPlainText,
+	senderName,
 	splitEmailList,
 	stripHtml,
 	toEmailListValue,
@@ -464,8 +465,9 @@ export function useComposeForm(mailboxId?: string, _folder?: string, config: Use
 		const toRecipients = splitEmailList(to);
 		if (toRecipients.length === 0) { setError("Add at least one recipient."); return; }
 		const ccRecipients = splitEmailList(cc); const bccRecipients = splitEmailList(bcc);
-		const fromName = currentMailbox.settings?.fromName || currentMailbox.name;
-		const from = fromName && fromName !== currentMailbox.email ? { email: currentMailbox.email, name: fromName } : currentMailbox.email;
+		const fromName = senderName(currentMailbox);
+		if (!fromName) { setError("Set this mailbox's sender name in Settings before sending."); return; }
+		const from = { email: currentMailbox.email, name: fromName };
 		const emailData = {
 			to: toEmailListValue(toRecipients),
 			cc: toEmailListValue(ccRecipients),
