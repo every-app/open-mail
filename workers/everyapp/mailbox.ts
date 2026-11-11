@@ -573,6 +573,33 @@ export class MailboxDO extends UpstreamMailboxDO {
 		return email.thread_id;
 	}
 
+	// ── Send rate limit ────────────────────────────────────────────
+
+	/**
+	 * Upstream's limits (20 sends per hour, 100 per day per mailbox), with the
+	 * dates compared as times. Upstream compares the stored `date`, an ISO
+	 * string (`2026-11-10T07:34:06.063Z`), with `datetime('now', '-1 hour')`
+	 * (`2026-11-10 15:04:23`) as text: `T` sorts after the space, so every
+	 * send since midnight UTC counted as "in the last hour" and the hourly
+	 * limit was really 20 per UTC day. `datetime(date)` normalizes the stored
+	 * value first.
+	 */
+	override async checkSendRateLimit(): Promise<string | null> {
+		const countSince = (modifier: string) =>
+			[
+				...this.ctx.storage.sql.exec<{ cnt: number }>(
+					`SELECT COUNT(*) AS cnt FROM emails
+					 WHERE folder_id = ?1 AND datetime(date) >= datetime('now', ?2)`,
+					Folders.SENT,
+					modifier,
+				),
+			][0]?.cnt ?? 0;
+
+		if (countSince("-1 hour") >= 20) return "Rate limit exceeded: max 20 emails per hour per mailbox";
+		if (countSince("-1 day") >= 100) return "Rate limit exceeded: max 100 emails per day per mailbox";
+		return null;
+	}
+
 	// ── Deletes: label rows go with the email ──────────────────────
 
 	// The foreign key cascades already; deleting explicitly keeps it so even

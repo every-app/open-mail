@@ -2,6 +2,7 @@
 
 ## Decide
 
+- [ ] **Send rate limit fixed in the subclass.** Upstream's `checkSendRateLimit()` compares ISO `date` strings with `datetime('now', …)` as text, so its "20 per hour" was really 20 per UTC day. Default taken: `MailboxDO` in `workers/everyapp/mailbox.ts` overrides it with `datetime(date)`, keeping `workers/durableObject/*` byte-identical. Alternative: fix it upstream (cloudflare/agentic-inbox) and drop the override after the next merge.
 - [ ] **No default sender name.** A mailbox has no sender name until someone sets one (create dialog or Settings); the web compose and the MCP send tools refuse to send without one. Default taken: no fallback to the address's local part, which recipients saw as "ben". Alternative: keep defaulting to the local part.
 - [ ] **Conversation actions go back to the list.** Archive, Delete, Report spam, Move to, Delete forever and Mark unread in an open conversation return to the list (Gmail's default), not to the next conversation. Alternative: Gmail's "auto-advance" to the next/previous conversation.
 - [ ] **"N older messages" folds only more than 4 collapsed messages.** The run of read messages between the first and the first expanded one (always keeping the one before the newest) folds behind one divider when it's longer than 4. Alternative: Gmail's tighter fold (from 2 or 3).
