@@ -168,7 +168,20 @@ export function buildQuotedReplyBlock(
 	// The original HTML renders safely in the sandboxed iframe, but quoted
 	// reply blocks are injected into the compose editor where raw HTML would
 	// execute. Convert to escaped plain text instead.
-	const bodyToQuote = escapeHtml(stripHtml(body)).replace(/\n/g, "<br>");
+	// Entities are decoded first ("Review&#39;s" would show escaped twice), and
+	// paragraph breaks are kept.
+	const bodyToQuote = escapeHtml(
+		decodeHtmlEntities(
+			body
+				.replace(/<br\s*\/?>/gi, "\n")
+				.replace(/<\/(p|div|li|h\d)>/gi, "\n\n")
+				.replace(/<[^>]*>/g, "")
+				.replace(/[ \t]+/g, " ")
+				.replace(/\n[ \t]+/g, "\n")
+				.replace(/\n{3,}/g, "\n\n")
+				.trim(),
+		),
+	).replace(/\n/g, "<br>");
 
 	return `<br><blockquote style="border-left: 2px solid #ccc; margin: 0; padding-left: 1em; color: #666;">On ${formattedDate}, ${escapedSender} wrote:<br><br>${bodyToQuote}</blockquote>`;
 }
@@ -373,8 +386,18 @@ export function mailboxDisplayName(
 	mailbox: Pick<Mailbox, "email" | "name" | "settings"> | undefined,
 	mailboxId?: string,
 ): string {
-	if (!mailbox) return mailboxId?.split("@")[0] || "Mailbox";
+	if (!mailbox) return localPartName(mailboxId) || "Mailbox";
 	if (mailbox.settings?.fromName) return mailbox.settings.fromName;
 	if (mailbox.name && mailbox.name !== mailbox.email) return mailbox.name;
-	return mailbox.email.split("@")[0] || mailbox.name;
+	return localPartName(mailbox.email) || mailbox.name;
+}
+
+/** "outreach@x" → "Outreach", "daniel.okafor@x" → "Daniel Okafor": a name for an address with none. */
+function localPartName(address: string | undefined): string {
+	const local = address?.split("@")[0] ?? "";
+	return local
+		.split(/[._-]+/)
+		.filter(Boolean)
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
 }

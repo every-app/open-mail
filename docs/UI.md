@@ -32,7 +32,7 @@ OpenMail's interface behaves like Gmail (layout, flows, keyboard) and looks like
                        └───────────────────┘ └───────────────────────┘
 ```
 
-- **Top bar** (`app/components/TopBar.tsx`): menu button collapses the sidebar to an icon rail (desktop) or opens it as a sheet (mobile); the mailbox name with a dropdown to switch mailboxes or go to "All mailboxes"; a wide search field in the middle (`/` focuses it, Enter searches, the existing search syntax still works); on the right the agent button (opens the agent window, or minimizes it when it's open), settings, and the person's avatar/email (from `/api/v1/me`) with Sign out (opens the gateway).
+- **Top bar** (`app/components/TopBar.tsx`): menu button collapses the sidebar to an icon rail (desktop) or opens it as a sheet (mobile); the mailbox name with a dropdown to switch mailboxes or go to "All mailboxes"; a wide search field in the middle (`/` focuses it, Enter searches, the existing search syntax still works); on the right the agent button (opens the agent window, or minimizes it when it's open), settings, and the person's avatar/email (from `/api/v1/me`) with Back to Every App (the gateway owns sign-out).
 - **Sidebar** (`app/components/Sidebar.tsx`): a large Compose button on top, then Inbox, Starred (a virtual view: search `is:starred`), Sent, Drafts, Archive, Spam, Trash with unread counts (Drafts shows its total), then "Folders" with `+` for custom folders. Active item is filled with `bg-sidebar-accent`. Collapsed: icons only, with tooltips and a dot for unread.
 - **Main**: one pane, not a split. The list fills it; opening a conversation replaces the list (Gmail's default). The URL names the conversation: `/mailbox/:mailboxId/emails/:folder/:emailId`, so back/forward and reload work.
 - **Agent** (`app/components/AgentWindow.tsx`): a floating window like compose but larger (720px wide, nearly full height), the rightmost window at the bottom right. Its header has the Agent and AI clients tabs, Clear chat, minimize (to an "Agent" bar), expand (a centered window, about 1100px wide, with a backdrop; Escape restores) and close. Clicking the header's empty space minimizes or restores it. A first visit shows the minimized bar; open/minimized is remembered in `localStorage`, expanded never is. The chat stays mounted while minimized. On mobile it is full screen and minimizing hides it; the top bar's button brings it back.
@@ -49,7 +49,7 @@ OpenMail's interface behaves like Gmail (layout, flows, keyboard) and looks like
 
 - Toolbar: back to list (← and `u`), Archive, Report spam, Delete, Mark unread, Move to ▾, more (Show original); right side "3 of 25" with older/newer arrows.
 - Subject as a large heading with the folder badge. Messages oldest first like Gmail (collapsed to one line each except the newest and unread ones; "N older messages" collapses a long middle). Each expanded message: avatar initial, sender name and address, "to me", date, star, Reply and more menu (Reply, Reply all, Forward, Show original, Delete this message).
-- The agent's draft in the thread shows as a draft card with Edit and Send and Discard.
+- The agent's draft in the thread shows as an entry in the thread marked "Draft · needs review" (primary tone) with Send, Edit and Discard.
 - At the bottom: Reply, Reply all, Forward buttons that open the inline composer in place.
 
 ## Keyboard (Gmail's)

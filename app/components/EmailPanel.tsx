@@ -49,21 +49,26 @@ function EmailPanelSkeleton() {
 					<Skeleton key={i} className="size-7 rounded-md" />
 				))}
 			</div>
-			<div className="space-y-6 px-4 py-5 md:px-6">
-				<Skeleton className="h-7 w-2/3 max-w-xl" />
-				<div className="flex items-center gap-3">
-					<Skeleton className="size-9 rounded-full" />
-					<div className="flex-1 space-y-2">
-						<Skeleton className="h-3.5 w-48" />
-						<Skeleton className="h-3 w-28" />
-					</div>
-					<Skeleton className="h-3 w-24" />
+			<div className="w-full px-1 pt-5 sm:px-3 md:pt-6">
+				<div className="mb-5 space-y-3 px-1 sm:px-2">
+					<Skeleton className="h-7 w-2/3 max-w-xl" />
+					<Skeleton className="h-5 w-24" />
 				</div>
-				<div className="space-y-2.5 md:pl-12">
-					<Skeleton className="h-3 w-full" />
-					<Skeleton className="h-3 w-11/12" />
-					<Skeleton className="h-3 w-4/6" />
-					<Skeleton className="h-3 w-3/4" />
+				<div className="rounded-xl border border-border bg-card px-4 py-4 shadow-xs sm:px-5">
+					<div className="flex items-center gap-3">
+						<Skeleton className="size-9 rounded-full" />
+						<div className="flex-1 space-y-2">
+							<Skeleton className="h-3.5 w-48" />
+							<Skeleton className="h-3 w-28" />
+						</div>
+						<Skeleton className="h-3 w-24" />
+					</div>
+					<div className="mt-5 space-y-2.5 pl-12">
+						<Skeleton className="h-3 w-full" />
+						<Skeleton className="h-3 w-11/12" />
+						<Skeleton className="h-3 w-4/6" />
+						<Skeleton className="h-3 w-3/4" />
+					</div>
 				</div>
 			</div>
 		</div>
@@ -388,7 +393,7 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 	const shownDrafts = drafts.filter((d) => d.id !== composerDraftId && d.id !== windowDraftId);
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-background">
+		<div className="flex h-full min-h-0 flex-col bg-card">
 			<EmailPanelToolbar
 				mailboxId={mailboxId}
 				folderId={folderId}
@@ -410,13 +415,14 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 			/>
 
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto max-w-5xl pb-16">
-					<header className="flex items-start gap-3 px-4 pt-5 pb-3 md:px-6 md:pl-[4.25rem]">
+				{/* The pane's full width, as Gmail: the subject, the messages, drafts and the reply. */}
+				<div className="w-full px-1 pt-5 pb-24 sm:px-3 md:pt-6">
+					<header className="mb-5 flex items-start gap-3 px-4 sm:px-5">
 						<div className="min-w-0 flex-1">
-							<h1 className="inline text-xl leading-snug font-normal text-foreground [overflow-wrap:anywhere] md:text-[1.375rem]">
+							<h1 className="text-xl leading-tight font-semibold tracking-tight text-foreground [overflow-wrap:anywhere] md:text-2xl">
 								{email.subject || "(no subject)"}
 							</h1>
-							<span className="ml-2 inline-flex translate-y-[-2px] flex-wrap items-center gap-1.5 align-middle">
+							<div className="mt-2.5 flex flex-wrap items-center gap-1.5">
 								<Badge variant="secondary">{folderName}</Badge>
 								{labels.map((label) => (
 									<LabelChip
@@ -430,7 +436,10 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 										}
 									/>
 								))}
-							</span>
+								{messages.length > 1 && (
+									<span className="ml-1 text-xs text-muted-foreground">{messages.length} messages</span>
+								)}
+							</div>
 						</div>
 						<IconTooltip label={conversationStarred ? "Starred" : "Not starred"}>
 							<Button
@@ -439,29 +448,29 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								onClick={toggleConversationStar}
 								aria-label={conversationStarred ? "Unstar conversation" : "Star conversation"}
 								aria-pressed={conversationStarred}
-								className="mt-0.5"
+								className="text-muted-foreground"
 							>
 								<Star className={cn(conversationStarred && "fill-warning text-warning")} />
 							</Button>
 						</IconTooltip>
 					</header>
 
-					<div className="divide-y divide-border border-y border-border bg-card">
+					<div className="divide-y divide-border border-y border-border">
 						{rows.map((row) => {
 							if (row.kind === "fold") {
 								return (
-									<div key="fold" className="relative flex h-9 items-center px-4 md:px-6">
-										<div className="absolute inset-x-0 top-1/2 border-t border-dashed border-border" aria-hidden />
-										<button
-											type="button"
-											onClick={() => setUnfolded(true)}
-											className="relative ml-0.5 flex size-8 items-center justify-center rounded-full border border-border bg-card text-xs font-medium text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
-											aria-label={`Show ${row.count} older messages`}
-										>
+									<button
+										key="fold"
+										type="button"
+										onClick={() => setUnfolded(true)}
+										className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset sm:px-5"
+										aria-label={`Show ${row.count} older messages`}
+									>
+										<span className="flex size-8 items-center justify-center rounded-full border border-dashed border-border bg-background text-xs">
 											{row.count}
-										</button>
-										<span className="relative ml-2 bg-card px-1 text-xs text-muted-foreground">{row.count} older messages</span>
-									</div>
+										</span>
+										{row.count} older messages
+									</button>
 								);
 							}
 							const m = row.email;
@@ -486,24 +495,25 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 								/>
 							);
 						})}
+						{shownDrafts.map((draft) => (
+							<DraftCard
+								key={draft.id}
+								draft={draft}
+								selfAddress={selfAddress}
+								selfName={selfName}
+								isSending={sendingDraftId === draft.id}
+								onEdit={() => editDraft(draft)}
+								onSend={() => void sendDraft(draft)}
+								onDiscard={() => void discardDraft(draft)}
+								extraActions={
+									<GmailOnly>
+										<GmailDraftButton mailboxId={mailboxId} emailId={draft.id} />
+									</GmailOnly>
+								}
+							/>
+						))}
 					</div>
 
-					{shownDrafts.map((draft) => (
-						<DraftCard
-							key={draft.id}
-							draft={draft}
-							selfAddress={selfAddress}
-							isSending={sendingDraftId === draft.id}
-							onEdit={() => editDraft(draft)}
-							onSend={() => void sendDraft(draft)}
-							onDiscard={() => void discardDraft(draft)}
-							extraActions={
-								<GmailOnly>
-									<GmailDraftButton mailboxId={mailboxId} emailId={draft.id} />
-								</GmailOnly>
-							}
-						/>
-					))}
 
 					{composer ? (
 						<InlineReply
@@ -515,18 +525,18 @@ export default function EmailPanel({ emailId }: { emailId: string }) {
 						/>
 					) : (
 						messages.length > 0 && (
-							<div className="flex flex-wrap gap-2 px-4 pt-4 md:px-6 md:pl-[4.25rem]">
-								<Button variant="outline" onClick={() => openComposer("reply")}>
+							<div className="mt-5 flex flex-wrap gap-2 pl-4 sm:pl-[4.25rem]">
+								<Button variant="outline" className="rounded-full px-4" onClick={() => openComposer("reply")}>
 									<Reply />
 									Reply
 								</Button>
 								{canReplyAll && (
-									<Button variant="outline" onClick={() => openComposer("reply-all")}>
+									<Button variant="outline" className="rounded-full px-4" onClick={() => openComposer("reply-all")}>
 										<ReplyAll />
 										Reply all
 									</Button>
 								)}
-								<Button variant="outline" onClick={() => openComposer("forward")}>
+								<Button variant="outline" className="rounded-full px-4" onClick={() => openComposer("forward")}>
 									<Forward />
 									Forward
 								</Button>

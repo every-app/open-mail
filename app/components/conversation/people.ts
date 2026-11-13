@@ -76,3 +76,20 @@ export function relativeTime(dateStr: string, now = Date.now()): string {
 	}
 	return "just now";
 }
+
+/**
+ * The sender with their display name. Inbound mail stores only the bare
+ * address in `sender`; the name ("Tom Becker") is in the stored From header.
+ */
+export function senderPerson(email: { sender: string; raw_headers?: string | null }): Person {
+	const bare = parsePerson(email.sender);
+	if (bare.hasName || !email.raw_headers) return bare;
+	try {
+		const headers = JSON.parse(email.raw_headers) as { key?: string; value?: string }[];
+		const from = Array.isArray(headers) ? headers.find((h) => h?.key?.toLowerCase() === "from")?.value : undefined;
+		if (!from) return bare;
+		const person = parsePerson(from);
+		if (person.hasName && person.address.toLowerCase() === bare.address.toLowerCase()) return person;
+	} catch {}
+	return bare;
+}

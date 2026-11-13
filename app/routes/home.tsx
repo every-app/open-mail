@@ -3,13 +3,14 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, LogOut, Mail, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ellipsis, Mail, Plus, Settings, Trash2, TriangleAlert } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router";
 import { Folders } from "shared/folders";
 import { toast } from "sonner";
 import { PageHeader } from "~/components/PageHeader";
-import { ThemePreferenceMenuItems } from "~/components/ThemePreferenceMenuItems";
+import { AccountMenu } from "~/components/AccountMenu";
+import { SenderAvatar } from "~/components/conversation/SenderAvatar";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import {
 	AlertDialog,
@@ -20,7 +21,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
 	Dialog,
@@ -32,15 +32,6 @@ import {
 	DialogTitle,
 } from "~/components/ui/dialog";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
-import {
 	Empty,
 	EmptyContent,
 	EmptyDescription,
@@ -49,18 +40,26 @@ import {
 	EmptyTitle,
 } from "~/components/ui/empty";
 import { Field, FieldError, FieldGroup, FieldLabel } from "~/components/ui/field";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import { Input } from "~/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { useDocumentTitle } from "~/hooks/useDocumentTitle";
-import { mailboxDisplayName } from "~/lib/utils";
+import { cn } from "~/lib/cn";
+import { formatListDate, mailboxDisplayName } from "~/lib/utils";
 // Gmail (docs/GMAIL.md): the connect card and the rows' Gmail tag.
 import ConnectGmailCard, { GmailMailboxBadge } from "~/components/gmail/ConnectGmailCard";
 import GmailOnly from "~/components/gmail/GmailOnly";
 import { useFolders } from "~/queries/folders";
 import { queryKeys } from "~/queries/keys";
-import { useCreateMailbox, useDeleteMailbox, useMailboxes } from "~/queries/mailboxes";
+import { useEmails } from "~/queries/emails";
+import { useCreateMailbox, useDeleteMailbox, useMailbox, useMailboxes } from "~/queries/mailboxes";
 import api, { meQuery } from "~/services/api";
 
 export function meta() {
@@ -193,14 +192,15 @@ export default function HomeRoute() {
 	);
 
 	return (
-		<div className="flex min-h-dvh flex-col bg-background">
+		<div className="flex h-dvh flex-col overflow-hidden bg-background">
 			<HomeHeader />
 
-			<main className="flex-1 px-4 pt-4 pb-16 md:px-6 md:pt-8">
-				<div className="mx-auto w-full max-w-3xl space-y-6">
+			{/* The mail frame's main pane, so the picker and a mailbox read as one app. */}
+			<main className="min-h-0 flex-1 overflow-y-auto bg-card md:mx-2 md:mb-2 md:rounded-xl md:border md:border-border">
+				<div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-6 pb-16 sm:px-6 md:px-10 md:pt-10">
 					<PageHeader
 						title="Mailboxes"
-						description="Shared with everyone in your organization"
+						description="Shared with everyone in your organization. Pick one to open its inbox."
 						actions={canCreate && accounts.length > 0 ? newMailboxButton : undefined}
 						backLink={
 							// The way back up, first on the page as in every Every App app's sidebar.
@@ -225,9 +225,9 @@ export default function HomeRoute() {
 					{isLoading ? (
 						<MailboxListSkeleton />
 					) : accounts.length > 0 ? (
-						<ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+						<ul className="grid gap-4 sm:grid-cols-2">
 							{accounts.map((account) => (
-								<MailboxRow
+								<MailboxCard
 									key={account.id}
 									id={account.id}
 									email={account.email}
@@ -348,15 +348,17 @@ export default function HomeRoute() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete mailbox</AlertDialogTitle>
+						<AlertDialogTitle>Delete this mailbox?</AlertDialogTitle>
 						<AlertDialogDescription>
-							Delete <strong className="font-medium text-foreground">{mailboxToDelete?.email}</strong>?
+							<strong className="font-medium text-foreground">{mailboxToDelete?.email}</strong> disappears for
+							everyone in your organization, with its settings, and mail sent to it stops arriving here.
+							This can't be undone.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<Button variant="destructive" pending={deleteMailbox.isPending} onClick={handleDelete}>
-							Delete
+							Delete mailbox
 						</Button>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -365,12 +367,15 @@ export default function HomeRoute() {
 	);
 }
 
-/** Home sits outside the mail frame: the product name, then the person's menu. */
+/** Home's top bar: the product where the mail frame has its mailbox, then the person's menu. */
 function HomeHeader() {
 	return (
-		<header className="flex h-14 shrink-0 items-center gap-2 px-4 md:px-6">
-			<RouterLink to="/" className="flex items-center gap-2 rounded-lg text-base font-semibold tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-				<span className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+		<header className="flex h-14 shrink-0 items-center gap-2 px-3 md:px-4">
+			<RouterLink
+				to="/"
+				className="flex items-center gap-2.5 rounded-lg px-1 text-base font-semibold tracking-tight outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+			>
+				<span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
 					<Mail className="size-4" aria-hidden />
 				</span>
 				OpenMail
@@ -382,66 +387,15 @@ function HomeHeader() {
 	);
 }
 
-/** The person (from /api/v1/me): theme and Sign out (the gateway). */
-function AccountMenu() {
-	const { data: me } = useQuery({ ...meQuery, retry: false });
-	const initial = (me?.email?.[0] ?? "?").toUpperCase();
-
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger
-				render={
-					<Button
-						variant="ghost"
-						size="icon"
-						className="rounded-full"
-						aria-label={me ? `Account: ${me.email}` : "Account"}
-					/>
-				}
-			>
-				<span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-					{initial}
-				</span>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuGroup>
-					<DropdownMenuLabel className="flex items-center gap-3 py-2">
-						<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-							{initial}
-						</span>
-						<span className="min-w-0">
-							<span className="block truncate text-sm font-medium text-foreground">
-								{me?.email ?? "Loading…"}
-							</span>
-							{me && <span className="block text-xs capitalize">{me.role}</span>}
-						</span>
-					</DropdownMenuLabel>
-				</DropdownMenuGroup>
-				<DropdownMenuSeparator />
-				<ThemePreferenceMenuItems />
-				{me?.gatewayUrl && (
-					<>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem render={<a href={me.gatewayUrl} />}>
-							<LogOut />
-							Sign out
-						</DropdownMenuItem>
-					</>
-				)}
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
 /**
- * One mailbox: avatar, name and address from the list alone (the name the
- * API lists: the display name given at creation, else the local part of the
- * address; the sender name set later in Settings travels with the mailbox,
- * not the list). When the name would be the address itself, the address
- * shows once. The Inbox's unread count comes from the folders the sidebar
- * loads anyway. The whole row opens the mailbox; Delete sits above the link.
+ * One mailbox as a card: its name as the mail frame shows it (the sender
+ * name from its settings, else the name it was created with, else a name
+ * made from the address), the address, the newest conversation in its Inbox,
+ * and what waits in it (unread mail, drafts to review). The whole card opens
+ * the mailbox. Settings and Delete, rare and (for Delete) destructive, live
+ * in the card's "More" menu, the same on every card, never beside the link.
  */
-function MailboxRow({
+function MailboxCard({
 	id,
 	email,
 	name,
@@ -455,65 +409,112 @@ function MailboxRow({
 	onDelete?: () => void;
 }) {
 	const { data: folders } = useFolders(id);
+	const { data: detail } = useMailbox(id);
+	const { data: drafts } = useEmails(id, { folder: Folders.DRAFT, page: "1", limit: "1" });
+	const { data: latestPage } = useEmails(id, { folder: Folders.INBOX, page: "1", limit: "1" });
+	const latest = latestPage?.emails?.[0];
 	const unread = folders?.find((f) => f.id === Folders.INBOX)?.unreadCount ?? 0;
-	const displayName = mailboxDisplayName({ email, name }, id);
-	const sameAsAddress = displayName === email;
+	const draftCount = drafts?.totalCount ?? 0;
+	const displayName = mailboxDisplayName(detail ?? { email, name }, id);
 
 	return (
-		<li className="group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 has-[a:focus-visible]:bg-muted/50">
-			<span
-				aria-hidden
-				className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
-			>
-				{displayName.charAt(0).toUpperCase()}
-			</span>
-			<div className="min-w-0 flex-1">
-				<RouterLink
-					to={`/mailbox/${id}`}
-					className="block truncate text-sm font-medium outline-none after:absolute after:inset-0"
-				>
-					{sameAsAddress ? email : displayName}
-				</RouterLink>
-				{!sameAsAddress && <div className="truncate text-sm text-muted-foreground">{email}</div>}
-			</div>
-			{badge}
-			{unread > 0 && (
-				<Badge variant="soft" aria-label={`${unread} unread`}>
-					{unread}
-				</Badge>
-			)}
-			{onDelete && (
-				<Tooltip>
-					<TooltipTrigger
+		<li className="group relative flex flex-col rounded-xl border border-border bg-card shadow-xs transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-md has-[a:focus-visible]:border-primary has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/30">
+			<div className="flex items-start gap-3 p-5 pb-4">
+				<SenderAvatar sender={email} name={displayName} className="size-11 rounded-xl text-base" />
+				<div className="min-w-0 flex-1 pt-0.5">
+					<RouterLink
+						to={`/mailbox/${id}`}
+						className="block truncate text-base leading-6 font-semibold text-foreground outline-none after:absolute after:inset-0 after:rounded-xl"
+					>
+						{displayName}
+					</RouterLink>
+					<div className="truncate text-sm text-muted-foreground">{email}</div>
+				</div>
+				<DropdownMenu>
+					<DropdownMenuTrigger
 						render={
 							<Button
 								variant="ghost"
 								size="icon-sm"
-								aria-label={`Delete mailbox ${email}`}
-								onClick={onDelete}
-								className="relative z-10 text-muted-foreground opacity-100 hover:text-destructive md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+								aria-label={`More for ${displayName}`}
+								className="relative z-10 -mt-1 -mr-2 text-muted-foreground"
 							/>
 						}
 					>
-						<Trash2 />
-					</TooltipTrigger>
-					<TooltipContent>Delete mailbox</TooltipContent>
-				</Tooltip>
-			)}
-			<ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+						<Ellipsis />
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-48">
+						<DropdownMenuItem render={<RouterLink to={`/mailbox/${id}/settings`} />}>
+							<Settings />
+							Mailbox settings
+						</DropdownMenuItem>
+						{onDelete && (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem variant="destructive" onClick={onDelete}>
+									<Trash2 />
+									Delete mailbox…
+								</DropdownMenuItem>
+							</>
+						)}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</div>
+			<div className="min-h-11 px-5 pb-4 pl-[4.75rem] text-sm">
+				{latest ? (
+					<div className="flex min-w-0 items-baseline gap-2">
+						<span className={cn("min-w-0 truncate", latest.read ? "text-muted-foreground" : "font-medium text-foreground")}>
+							{latest.subject || "(no subject)"}
+						</span>
+						<span className="shrink-0 text-xs text-muted-foreground">{formatListDate(latest.date)}</span>
+					</div>
+				) : latestPage ? (
+					<span className="text-muted-foreground">No mail yet</span>
+				) : null}
+			</div>
+			<div className="mt-auto flex items-center gap-2 border-t border-border px-5 py-3 text-sm">
+				{unread > 0 ? (
+					<span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+						<span className="size-1.5 rounded-full bg-primary" aria-hidden />
+						{unread} unread
+					</span>
+				) : (
+					<span className="text-muted-foreground">All read</span>
+				)}
+				{draftCount > 0 && (
+					<>
+						<span className="text-muted-foreground/50" aria-hidden>
+							·
+						</span>
+						<span className="text-muted-foreground">
+							{draftCount} {draftCount === 1 ? "draft" : "drafts"} to review
+						</span>
+					</>
+				)}
+				{badge}
+				<span className="ml-auto inline-flex items-center gap-0.5 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100">
+					Open
+					<ChevronRight className="size-4" aria-hidden />
+				</span>
+			</div>
 		</li>
 	);
 }
 
 function MailboxListSkeleton() {
 	return (
-		<div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-xs" aria-busy>
-			{[0, 1, 2].map((i) => (
-				<div key={i} className="flex items-center gap-3 px-4 py-3">
-					<Skeleton className="size-9 rounded-full" />
-					<div className="flex-1 space-y-2">
-						<Skeleton className="h-3.5 w-32" />
-						<Skeleton className="h-3 w-48" />
+		<div className="grid gap-4 sm:grid-cols-2" aria-busy>
+			{[0, 1].map((i) => (
+				<div key={i} className="rounded-xl border border-border bg-card shadow-xs">
+					<div className="flex items-start gap-3 p-5 pb-4">
+						<Skeleton className="size-11 rounded-xl" />
+						<div className="flex-1 space-y-2 pt-1">
+							<Skeleton className="h-4 w-28" />
+							<Skeleton className="h-3 w-40" />
+						</div>
+					</div>
+					<div className="border-t border-border px-5 py-3">
+						<Skeleton className="h-3.5 w-20" />
 					</div>
 				</div>
 			))}

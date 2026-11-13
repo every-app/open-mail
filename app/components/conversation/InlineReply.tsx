@@ -7,8 +7,11 @@ import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { useComposeForm } from "~/hooks/useComposeForm";
 import { type ComposeOptions, useUIStore } from "~/hooks/useUIStore";
+import { mailboxDisplayName } from "~/lib/utils";
+import { useMailbox } from "~/queries/mailboxes";
 import type { Email } from "~/types";
 import { IconTooltip } from "./IconTooltip";
+import { SenderAvatar } from "./SenderAvatar";
 
 const MODE_ICON = { reply: Reply, "reply-all": ReplyAll, forward: Forward, new: Reply } as const;
 const MODE_LABEL = { reply: "Reply", "reply-all": "Reply all", forward: "Forward", new: "Reply" } as const;
@@ -28,7 +31,7 @@ function AddressRow({
 }) {
 	const id = `inline-reply-${label.toLowerCase()}`;
 	return (
-		<div className="flex min-h-9 items-center gap-2 border-b border-border px-3">
+		<div className="flex min-h-11 items-center gap-2 border-b border-border px-4 sm:px-5">
 			<label htmlFor={id} className="w-7 shrink-0 text-sm text-muted-foreground">
 				{label}
 			</label>
@@ -39,7 +42,7 @@ function AddressRow({
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				placeholder={label === "To" ? "Recipients" : undefined}
-				className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+				className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 				autoComplete="off"
 			/>
 			{children}
@@ -67,6 +70,9 @@ export function InlineReply({
 	onDraftIdChange?: (draftId: string | null) => void;
 }) {
 	const form = useComposeForm(mailboxId, undefined, { options, autosaveMs: 2000 });
+	const { data: mailbox } = useMailbox(mailboxId);
+	const selfAddress = mailbox?.email ?? mailboxId;
+	const selfName = mailboxDisplayName(mailbox, mailboxId);
 	const { to, setTo, cc, setCc, bcc, setBcc, showCcBcc, setShowCcBcc, subject, body, setBody, error, isSending, isDirty, saveStatus, draftId } = form;
 	const rootRef = useRef<HTMLFormElement>(null);
 	const toRef = useRef<HTMLInputElement>(null);
@@ -144,11 +150,13 @@ export function InlineReply({
 	};
 
 	return (
+		<div className="mt-5 flex items-start gap-3 sm:px-5">
+			<SenderAvatar sender={selfAddress} name={selfName} self className="mt-1 hidden size-9 sm:flex" />
 		<form
 			ref={rootRef}
 			onSubmit={(e) => form.handleSend(e, onClose)}
 			onKeyDown={onKeyDown}
-			className="mx-4 my-3 overflow-hidden rounded-xl border border-border bg-card shadow-md md:mx-6"
+			className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgb(0_0_0/0.08),0_4px_16px_rgb(0_0_0/0.06)]"
 			aria-label={MODE_LABEL[options.mode]}
 		>
 			<SendingOffBanner />
@@ -159,7 +167,7 @@ export function InlineReply({
 				</Alert>
 			)}
 
-			<div className="flex items-center border-b border-border pl-3">
+			<div className="flex items-center border-b border-border pl-4 sm:pl-5">
 				<Icon className="size-4 shrink-0 text-muted-foreground" aria-label={MODE_LABEL[options.mode]} />
 				<div className="min-w-0 flex-1 [&>div]:border-b-0">
 					<AddressRow label="To" value={to} onChange={setTo} inputRef={toRef}>
@@ -182,14 +190,22 @@ export function InlineReply({
 				</>
 			)}
 
-			<div className="p-2">
-				{quote !== null && <RichTextEditor value={head} onChange={(html) => setBody(html + (quote ?? ""))} />}
+			<div className="px-2 pt-1 pb-1 sm:px-3">
+				{quote !== null && (
+					<RichTextEditor
+						value={head}
+						onChange={(html) => setBody(html + (quote ?? ""))}
+						bordered={false}
+						toolbarPosition="bottom"
+						className="[&_.ProseMirror]:text-[0.9375rem] [&_.ProseMirror]:leading-[1.65]"
+					/>
+				)}
 				{quote && (
 					<IconTooltip label="Show trimmed content" side="right">
 						<button
 							type="button"
 							onClick={() => setQuote("")}
-							className="mt-2 ml-1 flex h-4 items-center rounded-sm bg-muted px-1.5 text-muted-foreground outline-none hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50"
+							className="mt-1 mb-1 ml-3 flex h-4 items-center rounded-sm bg-muted px-1.5 text-muted-foreground outline-none hover:bg-foreground/10 focus-visible:ring-3 focus-visible:ring-ring/50"
 							aria-label="Show trimmed content"
 						>
 							<Ellipsis className="size-4" />
@@ -198,8 +214,8 @@ export function InlineReply({
 				)}
 			</div>
 
-			<div className="flex items-center gap-2 px-3 pb-3">
-				<Button type="submit" disabled={isSending}>
+			<div className="flex items-center gap-2 px-4 pt-1 pb-3 sm:px-5">
+				<Button type="submit" disabled={isSending} className="rounded-full px-5">
 					{isSending ? <Spinner /> : <Send />}
 					{isSending ? "Sending…" : "Send"}
 				</Button>
@@ -220,5 +236,6 @@ export function InlineReply({
 				</div>
 			</div>
 		</form>
+		</div>
 	);
 }

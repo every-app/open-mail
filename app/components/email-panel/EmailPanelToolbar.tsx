@@ -92,7 +92,7 @@ export default function EmailPanelToolbar({
 	const ownMail = folderId === Folders.SENT || folderId === Folders.DRAFT;
 
 	return (
-		<div className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-0.5 border-b border-border bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-4">
+		<div className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-0.5 border-b border-border bg-card/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-card/80 md:px-4">
 			<IconTooltip label="Back to list (u)">
 				<Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="Back to list">
 					<ArrowLeft />

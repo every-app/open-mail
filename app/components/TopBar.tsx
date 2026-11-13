@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
 	ArrowLeft,
 	Bot,
@@ -6,7 +5,6 @@ import {
 	ChevronDown,
 	Inbox,
 	Keyboard,
-	LogOut,
 	Menu,
 	Search,
 	Settings,
@@ -14,7 +12,7 @@ import {
 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { ThemePreferenceMenuItems } from "~/components/ThemePreferenceMenuItems";
+import { AccountMenu } from "~/components/AccountMenu";
 import { Button } from "~/components/ui/button";
 import {
 	DropdownMenu,
@@ -40,7 +38,6 @@ import { cn } from "~/lib/cn";
 import { folderPath, searchPath } from "~/lib/mail-paths";
 import { mailboxDisplayName } from "~/lib/utils";
 import { useMailbox, useMailboxes } from "~/queries/mailboxes";
-import { meQuery } from "~/services/api";
 
 function IconTooltip({ label, children }: { label: string; children: React.ReactElement }) {
 	return (
@@ -191,57 +188,16 @@ function SearchField({
 	);
 }
 
-/** The person (from /api/v1/me): theme, keyboard shortcuts, Sign out (the gateway). */
-function AccountMenu() {
-	const { data: me } = useQuery({ ...meQuery, retry: false });
+/** The account menu, with the mail frame's Keyboard shortcuts. */
+function MailAccountMenu() {
 	const setShortcutsOpen = useUIStore((s) => s.setShortcutsOpen);
-	const initial = (me?.email?.[0] ?? "?").toUpperCase();
-
 	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger
-				render={
-					<Button
-						variant="ghost"
-						size="icon"
-						className="rounded-full"
-						aria-label={me ? `Account: ${me.email}` : "Account"}
-					/>
-				}
-			>
-				<span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-					{initial}
-				</span>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-64">
-				<DropdownMenuGroup>
-					<DropdownMenuLabel className="flex items-center gap-3 py-2">
-						<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-							{initial}
-						</span>
-						<span className="min-w-0">
-							<span className="block truncate text-sm font-medium text-foreground">
-								{me?.email ?? "Loading…"}
-							</span>
-							{me && <span className="block text-xs capitalize">{me.role}</span>}
-						</span>
-					</DropdownMenuLabel>
-				</DropdownMenuGroup>
-				<DropdownMenuSeparator />
-				<ThemePreferenceMenuItems />
-				<DropdownMenuSeparator />
-				<DropdownMenuItem onClick={() => setShortcutsOpen(true)}>
-					<Keyboard />
-					Keyboard shortcuts
-				</DropdownMenuItem>
-				{me?.gatewayUrl && (
-					<DropdownMenuItem render={<a href={me.gatewayUrl} />}>
-						<LogOut />
-						Sign out
-					</DropdownMenuItem>
-				)}
-			</DropdownMenuContent>
-		</DropdownMenu>
+		<AccountMenu>
+			<DropdownMenuItem onClick={() => setShortcutsOpen(true)}>
+				<Keyboard />
+				Keyboard shortcuts
+			</DropdownMenuItem>
+		</AccountMenu>
 	);
 }
 
@@ -326,7 +282,7 @@ export default function TopBar() {
 						<Settings className="size-5" />
 					</Button>
 				</IconTooltip>
-				<AccountMenu />
+				<MailAccountMenu />
 			</div>
 		</header>
 	);
